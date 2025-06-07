@@ -45,7 +45,6 @@ coverage.xml
 *.sublime-workspace
 
 # Streamlit specific
-/.streamlit/
 secrets.toml
 
 # Data files
