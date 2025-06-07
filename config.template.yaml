@@ -1,0 +1,18 @@
+app:
+  title: "🔧 MACHINING INFORMATION SYSTEM 📢"
+  version: "1.0"
+
+refresh: # in seconds
+  page_refresh: 60                    # Can be used as default st.cache_data ttl
+  offset_cache: 5                     # Extra buffer to avoid race conditions
+  inspection_data_cache: 300
+
+thresholds:
+  duration_min:
+    red: 0
+    amber: 10
+
+data:
+  source_path: "./data/tool_data.csv" # placeholder, used to stored dimension list later
+
+demo_mode: true
