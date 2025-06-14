@@ -13,13 +13,15 @@ DEMO_MODE = config['demo_mode']
 # ---- Database connection using .env variables ----
 
 # Load environment variables
-load_dotenv()
+script_dir = os.path.dirname(os.path.abspath(__file__))
+dotenv_path = os.path.join(script_dir, '.env')
+load_dotenv(dotenv_path)
 
 def get_db_connection():
-    server = os.getenv("SERVER")
-    database = os.getenv("DATABASE")
-    username = os.getenv("USERNAME")
-    password = os.getenv("PASSWORD")
+    server = os.getenv("SQL_SERVER")
+    database = os.getenv("SQL_DATABASE")
+    username = os.getenv("SQL_USERNAME")
+    password = os.getenv("SQL_PASSWORD")
 
     conn = pyodbc.connect(
         f'DRIVER=SQL Server Native Client 11.0;'
