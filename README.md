@@ -20,7 +20,7 @@ app/
 1. Copy the template files:
 ```cmd
 copy .env.template .env
-copy custom_config.template.yaml custom_config.yaml
+copy config.template.yaml config.yaml
 copy .streamlit\config.template.toml .streamlit\config.toml
 ```
 
