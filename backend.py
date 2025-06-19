@@ -24,7 +24,7 @@ def get_db_connection():
     password = os.getenv("SQL_PASSWORD")
 
     conn = pyodbc.connect(
-        f'DRIVER=SQL Server Native Client 11.0;'
+        f'DRIVER=ODBC Driver 17 for SQL Server;'
         f'SERVER={server};'
         f'DATABASE={database};'
         f'UID={username};'

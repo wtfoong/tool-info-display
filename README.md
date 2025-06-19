@@ -27,13 +27,7 @@ copy .streamlit\config.template.toml .streamlit\config.toml
 2. Deployment
 
 ```
-[Browser]
-   ↓   (https://tool-info-display.shimano.com)
-[NGINX Reverse Proxy]
-   ↓   (http://localhost:8501)
-[Streamlit App]
-   ↑   (auto-started & kept alive by NSSM)
-[NSSM Windows Service]
+[Window Task Scheduler --> app_launcher.ps1]
 ```
 
 ## Architecture
