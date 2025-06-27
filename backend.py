@@ -372,6 +372,26 @@ def load_data_all():
 
     return df
 
+# get CTQ SpecNo
+def get_CTQ_SpecNo(sapcode):
+    conn = get_db_connection()
+    query = f'''
+    SET NOCOUNT ON
+    SET ANSI_WARNINGS OFF
+    ;
+
+    DECLARE @SAPCODE AS NVARCHAR(100) = '{sapcode}'
+    
+    SELECT
+    BalloonNo
+    FROM [QMM].[dbo].[SPCcontrolPlan]
+    WHERE 1=1
+    AND [ControlPlanId] IN (SELECT [ControlPlanId] FROM [QMM].[dbo].[SPCcontrolPlanGenInfo] WHERE SAPCode = @SAPCODE AND IsActive = 1  AND DEPARTMENT != 'VEND') and CAT = 2
+    '''
+    df = pd.read_sql(query, conn)
+    conn.close()
+    return df
+
 # get inspection data
 def get_inspection_data(sapcode, specno):
     conn = get_db_connection()
@@ -386,28 +406,30 @@ def get_inspection_data(sapcode, specno):
     --DECLARE @SAPCODE AS NVARCHAR(100) = '40039550'
     --DECLARE @SPECNO AS NVARCHAR(100) = '201'
 
-    ;WITH CTE_BALLOON AS (
+     ;WITH CTE_BALLOON AS (
     SELECT
     [CharId]
     ,[MinVal]
     ,[MaxVal]
     ,[NomVal]
+    , [Description]
+    , [BalloonNo]
+    , [CAT]
     FROM [QMM].[dbo].[SPCcontrolPlan]
     WHERE 1=1
     AND [ControlPlanId] IN (SELECT [ControlPlanId] FROM [QMM].[dbo].[SPCcontrolPlanGenInfo] WHERE SAPCode = @SAPCODE AND IsActive = 1  AND DEPARTMENT != 'VEND')
     AND [BalloonNo] = @SPECNO
     )
 
-    SELECT TOP(30)
-	A.[MeasDate], TRY_CAST(A.[MeasVal] AS NUMERIC(26,4)) AS MeasVal
+    SELECT TOP(30) A.[MeasDate], TRY_CAST(A.[MeasVal] AS NUMERIC(26,4)) AS MeasVal, C.MinVal, C.MaxVal,c.[Description],c.CharId, c.BalloonNo, c.CAT
     FROM [QMM].[dbo].[InspResult] AS A
 
 	INNER JOIN [QMM].[dbo].[InspMainInfo] AS B
 	ON A.InspId = B.[InspId]
+    join CTE_BALLOON C on C.CharId = A.CharId
 
     WHERE 1=1
 	AND B.FormType = 'PROD'
-	AND A.[CharId] IN (SELECT [CharId] FROM CTE_BALLOON)
     ORDER BY A.[CharId],A.[MeasDate] DESC --get latest 30 inspection data
 
 	OPTION(RECOMPILE);
