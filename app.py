@@ -71,6 +71,9 @@ if 'clicked_materialcode' not in st.session_state:
 
 if 'clicked_location' not in st.session_state:
     st.session_state.clicked_location = None
+    
+if 'clicked_materialdesc' not in st.session_state:
+    st.session_state.clicked_materialdesc = None
 
 # ---- Information Display ----
 
@@ -154,6 +157,7 @@ def ShowTimerInfo():
                         st.session_state.clicked_location = row['Location'] # update session state
 
                         st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
+                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
 
                 with col_button:
                     st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
@@ -166,6 +170,7 @@ def ShowTimerInfo():
                         # #toggle on
                         # else:
                         st.session_state.clicked_materialcode = row['MaterialCode'] # update session state
+                        st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
 
                         st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                 with col_LED:
@@ -233,6 +238,7 @@ def ShowTimerInfo():
                 st.markdown("### 🔍 Inspection Details")
 
                 materialcode = st.session_state.clicked_materialcode
+                materialdesc = st.session_state.clicked_materialdesc
                 specnoList = get_CTQ_SpecNo_cached(materialcode)
                 #specno = '201' #! hardcoded specno
                 for specno in specnoList['BalloonNo'].unique():
@@ -240,14 +246,14 @@ def ShowTimerInfo():
 
                     if not df_inspection_data.empty:
                         # Calculate ppk
-                        df_inspection_data['MinVal'] = pd.to_numeric(df_inspection_data['MinVal'], errors='coerce')
+                        df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
         
-                        df_inspection_data['MaxVal'] = pd.to_numeric(df_inspection_data['MaxVal'], errors='coerce')
+                        df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
 
-                        ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['MinVal'].iloc[0],df_inspection_data['MaxVal'].iloc[0])
+                        ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0])
 
-                        st.info(f"Showing details for: `{st.session_state.clicked_materialcode} |SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}`")
-                        fig = plot_IMR(df_inspection_data,df_inspection_data['MinVal'].iloc[0],df_inspection_data['MaxVal'].iloc[0]) 
+                        st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc} |SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}`")
+                        fig = plot_IMR(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0]) 
                         st.pyplot(fig)
                     else:
                         st.warning(f"No inspection data available for `{st.session_state.clicked_materialcode}`.")
