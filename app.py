@@ -119,13 +119,42 @@ def ShowTimerInfo():
             for index, row in filtered_df.iterrows():
 
                 # Create 3 columns: machine name | timer | button
-                col_name, col_timer, col_tool, col_button, col_LED = st.columns([3, 2, 1, 1,1])  # adjust ratios as needed
+                col_name, col_timer, col_tool, col_button = st.columns([3, 2, 1, 1])  # adjust ratios as needed
 
                 with col_name:
+                    color = (
+                        'red' if row['MacLEDRed'] else
+                        'yellow' if row['MacLEDYellow'] else
+                        '#00FF00' if row['MacLEDGreen'] else
+                        'None'
+                    )
+                    
+                    colorUI = f"""
+                        <style>
+                            .circle-container {{
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-around;
+                                    height: 100px; /* Adjust height as needed */
+                            }}
+                            .circle-button {{
+                                    height: 30px;
+                                    width: 30px;
+                                    border-radius: 50%;
+                                    border: 1px solid #000;
+                                    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
+                            }}
+                        </style>
+                        <span class="circle-button" style=" background: {color};"></span>
+                        """
+                    
                     if row['TechRequired']:
-                        st.markdown(f"<div style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭</strong></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭</strong>{colorUI}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div style='font-size: 50px;'><strong>{row['Location']}</strong></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='circle-container' style='font-size: 50px;'><strong>{row['Location']}</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        
+                    
+   
 
                 with col_timer:
                     color, blink_style = set_timer_style(row['DurationMins'])
@@ -173,34 +202,7 @@ def ShowTimerInfo():
                         st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
 
                         st.session_state.clicked_location = None  # 👈 force close the clicked_location button
-                with col_LED:
                     
-                    color = (
-                        'red' if row['MacLEDRed'] else
-                        'yellow' if row['MacLEDYellow'] else
-                        '#00FF00' if row['MacLEDGreen'] else
-                        'None'
-                    )
-                    st.markdown(f"""
-                        <style>
-                            .circle-container {{
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: flex-end;
-                                    height: 100px; /* Adjust height as needed */
-                            }}
-                            .circle-button {{
-                                    height: 30px;
-                                    width: 30px;
-                                    border-radius: 50%;
-                                    border: 1px solid #000;
-                                    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
-                            }}
-                        </style>
-                        <div class="circle-container">
-                            <span class="circle-button" style=" background: {color};"></span>
-                        </div>
-                        """, unsafe_allow_html=True)
 
 
 
