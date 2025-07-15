@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime
+from datetime import datetime,timedelta
 import time
 import pandas as pd
 
@@ -7,8 +7,8 @@ import pandas as pd
 from config_loader import load_config
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo
-from helper import set_timer_style, plot_IMR, calculate_ppk
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data
+from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph
 
 # ---- Load app setting from config ----
 
@@ -37,6 +37,12 @@ def get_inspection_data_cached(sapcode, specno):
 def get_CTQ_SpecNo_cached(sapcode):
     df_inspection_data = get_CTQ_SpecNo(sapcode)
     return df_inspection_data
+
+@st.cache_data(ttl= INSPECTION_DATA_CACHE)
+def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate):
+    df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate)
+    return df_Tool_Data
+
 
 # ---- UI ----
 # ---- Page config ----
@@ -113,9 +119,21 @@ def ShowTimerInfo():
     
     st.markdown(f"<p style='text-align: center; color: grey;'>Last refreshed: {last_refresh}</p>", unsafe_allow_html=True)
     with st.container():
-        col1, col2, col3 = st.columns([1,4,1])
+        col1, col2, col3 = st.columns([1,30,1])
+        
+        
 
         with col2:
+            # Header row
+            header_cols = st.columns([3, 2, 1, 1])
+            header_titles = ['Machine Condition', 'Count Down', 'Tool Detail', 'Inspection Detail']
+            for col, title in zip(header_cols, header_titles):
+                col.markdown(
+                    f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",
+                    unsafe_allow_html=True
+                )
+
+
             for index, row in filtered_df.iterrows():
 
                 # Create 3 columns: machine name | timer | button
@@ -138,8 +156,8 @@ def ShowTimerInfo():
                                     height: 100px; /* Adjust height as needed */
                             }}
                             .circle-button {{
-                                    height: 30px;
-                                    width: 30px;
+                                    height: 40px;
+                                    width: 40px;
                                     border-radius: 50%;
                                     border: 1px solid #000;
                                     box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
@@ -208,7 +226,7 @@ def ShowTimerInfo():
 
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
-        col1, col2, col3 = st.columns([1,4,1])
+        col1, col2, col3 = st.columns([1,30,1])
 
         with col2:
             def clear_selection_clicked_location():
@@ -219,11 +237,114 @@ def ShowTimerInfo():
                 st.markdown("### 📋 Upcoming Tool Change")
                 st.info(f"Showing data for: `{st.session_state.clicked_location}`")
 
-                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)']
+                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location]
-                df = df[cols]
+                df = df[cols].reset_index(drop=True)
 
-                st.dataframe(df, hide_index= True, use_container_width = False)
+                # Header row
+                header_cols = st.columns([1, 1, 2, 1, 1,1,2, 1,1,1])
+                header_titles = ['Turret', 'Tool', 'Process','Preset (pcs)','Actual (pcs)', 'Balance (pcs)', 'Balance (mins)','RPM', 'LoadX', 'LoadZ']
+                for col, title in zip(header_cols, header_titles):
+                    col.markdown(f"**{title}**")
+                
+                def clear_Selected_Graph(i):
+                    st.session_state[f'visible_graph_row_{i}']= None
+
+                # Render table with buttons
+                for i, row in df.iterrows():
+
+                    if f'visible_graph_row_{i}' not in st.session_state:
+                        st.session_state[f'visible_graph_row_{i}'] = None
+
+                    cols = st.columns([1, 1, 2, 1, 1,1,2, 1,1,1])  # Adjust column widths
+                    cols[0].write(row['Turret'])
+                    cols[1].write(str(row['Tool']))
+                    cols[2].write(row['Process'])
+                    cols[3].write(str(row['PresetCounter']))
+                    cols[4].write(str(row['TotalCounter']))
+                    
+                    cols[5].write(str(row['Balance (pcs)']))
+                    cols[6].write(str(row['Balance (mins)']))
+                    
+
+
+                    # Toggle button to show/hide graph
+                    if cols[7].button("RPM", key=f"btn_RPM_{i}"):
+                        if st.session_state[f'visible_graph_row_{i}'] == "RPM":
+                            st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
+                        else:
+                            st.session_state[f'visible_graph_row_{i}'] = "RPM"
+                        
+
+                    if cols[8].button("LoadX", key=f"btn_LoadX_{i}"):
+                        if st.session_state[f'visible_graph_row_{i}'] == "LoadX":
+                            st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
+                        else:
+                            st.session_state[f'visible_graph_row_{i}'] = "LoadX"
+
+                           
+                    if cols[9].button("LoadZ", key=f"btn_LoadZ_{i}"):
+                        if st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
+                            st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
+                        else:
+                            st.session_state[f'visible_graph_row_{i}'] = "LoadZ"
+                    
+                    if st.session_state[f'visible_graph_row_{i}'] == "RPM":
+                        
+                        # Get current datetime and subtract 1 hour
+                        start_date = datetime.now() - timedelta(hours=1)
+
+                        RPMDf = get_questdb_data(Position=row['Turret'],StartDate=start_date,ToolingStation=row['Tool'])
+                        if RPMDf.empty:
+                            st.error(f"No data available for Tool {row['Tool']} (RPMDf).")
+                        else:
+                            fig = plot_RPMGraph(
+                            RPMDf,start_date)
+                            st.pyplot(fig)
+                        st.button("❌ Close",key = f'close_RPM{i}' , on_click=clear_Selected_Graph, args=(i,))
+                        
+                    elif st.session_state[f'visible_graph_row_{i}'] == "LoadX":
+                        
+                        loadXDf = get_Current_Tool_Column_Data(
+                            MachineName=row['MachineID'],
+                            Position=row['Turret'],
+                            ToolingStation=row['Tool'],
+                            StartDate=row['StartDate']
+                        )
+                        
+                        if loadXDf.empty:
+                            st.error(f"No data available for Tool {row['Tool']} (Load_X).")
+                        else:
+                            fig = plot_selected_columns_by_pieces_made(
+                                loadXDf,
+                                selectedColumn='Load_X',
+                                TotalCounter=row['TotalCounter']
+                            )
+
+                            st.pyplot(fig)
+                        st.button("❌ Close",key = f'close_loadX{i}' , on_click=clear_Selected_Graph, args=(i,))
+
+                    elif st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
+                        loadZDf = get_Current_Tool_Column_Data(
+                            MachineName=row['MachineID'],
+                            Position=row['Turret'],
+                            ToolingStation=row['Tool'],
+                            StartDate=row['StartDate']
+                        )
+                        if loadZDf.empty:
+                            st.error(f"No data available for Tool {row['Tool']} (Load_Z).")
+                        else:
+                        
+                            fig = plot_selected_columns_by_pieces_made(
+                                loadZDf,
+                                selectedColumn='Load_Z',
+                                TotalCounter=row['TotalCounter']
+                            )
+
+                            st.pyplot(fig)
+                        st.button("❌ Close",key = f'close_loadZ{i}' , on_click=clear_Selected_Graph, args=(i,))
+
+
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_location}' , on_click=clear_selection_clicked_location)
                 st.markdown('---')
 
