@@ -135,8 +135,8 @@ def plot_IMR(df, usl, lsl):
     # ax2.set_title("Moving Range (MR) Chart")
     # ax2.set_ylabel("Moving Range")
     # ax2.set_xlabel("")
-    # ax2.set_xticks(selected_ticks)
-    # ax2.set_xticklabels(selected_labels, rotation=45)
+    ax1.set_xticks(selected_ticks)
+    ax1.set_xticklabels(selected_labels, rotation=45)
 
     # # Set spine (border) thickness
     # for spine in ax2.spines.values():
