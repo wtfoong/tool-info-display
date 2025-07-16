@@ -592,10 +592,11 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate):
     
     Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
     OT_DataLake_df['TIMESTAMP'] = pd.to_datetime(OT_DataLake_df['TIMESTAMP'])
-
     CurrentToolCountNQuestdbdf =pd.merge_asof(Questdb_df.sort_values('Timestamp'), OT_DataLake_df.sort_values('TIMESTAMP'), left_on='Timestamp', right_on='TIMESTAMP', direction='backward')
     CurrentToolCountNQuestdbdf['Timestamp'] = pd.to_datetime(CurrentToolCountNQuestdbdf['Timestamp'], format='%d/%m/%Y %H:%M:%S.%f')
+
     CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna()
+
     CurrentToolCountNQuestdbdf['VALUE'] =  CurrentToolCountNQuestdbdf['VALUE'].astype(int)
     
     CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
@@ -606,26 +607,31 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate):
     #filters
     #filter all data that have time diff of 5s and above with next row
     # Calculate time difference between consecutive rows
-    CurrentToolCountNQuestdbdf['time_diff'] = CurrentToolCountNQuestdbdf['Timestamp'].diff().dt.total_seconds()
-    # Identify indices where the time difference is greater than 5 seconds
-    indices_to_remove = CurrentToolCountNQuestdbdf.index[CurrentToolCountNQuestdbdf['time_diff'] > 5].tolist()
-    
-    # Also remove the previous row for each identified index
-    indices_to_remove += [i - 1 for i in indices_to_remove if i - 1 >= 0]
-    
-    # Drop duplicates and sort the indices
-    indices_to_remove = sorted(set(indices_to_remove))
-    
-    # Drop the rows from the DataFrame
+    if ToolingStation == 303:
+        CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['Load_Z'] <= 70]
+    else:
+        CurrentToolCountNQuestdbdf['time_diff'] = CurrentToolCountNQuestdbdf['Timestamp'].diff().dt.total_seconds()
+        # Identify indices where the time difference is greater than 5 seconds
+        indices_to_remove = CurrentToolCountNQuestdbdf.index[CurrentToolCountNQuestdbdf['time_diff'] > 5].tolist()
+        
+        # Also remove the previous row for each identified index
+        indices_to_remove += [i - 1 for i in indices_to_remove if i - 1 >= 0]
+        
+        # Drop duplicates and sort the indices
+        indices_to_remove = sorted(set(indices_to_remove))
+        
+        # Drop the rows from the DataFrame
 
-    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(index=indices_to_remove).reset_index(drop=True)
+        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(index=indices_to_remove).reset_index(drop=True)
 
-    # Drop the helper column
-    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns='time_diff')
+        # Drop the helper column
+        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns='time_diff')
+        
+        CurrentToolCountNQuestdbdf['percent_diff'] = abs(CurrentToolCountNQuestdbdf['SpdlSpd_RPM'] - CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP']) / CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP'] * 100
+        CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['percent_diff'] <= 2]
     
-    CurrentToolCountNQuestdbdf['percent_diff'] = abs(CurrentToolCountNQuestdbdf['SpdlSpd_RPM'] - CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP']) / CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP'] * 100
-    CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['percent_diff'] <= 2]
+
 
     #CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[selectedColumn]<=CutOffValue]
-    
+
     return CurrentToolCountNQuestdbdf
