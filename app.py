@@ -87,23 +87,6 @@ if 'clicked_materialdesc' not in st.session_state:
 def ShowTimerInfo():
     df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
 
-
-    #! ==================== WIP --> STILL BUGGY!!
-    # # ---- Auto rerun every PAGE_REFRESH seconds (without clearing session state) ----
-
-    # if 'enable_autorefresh' not in st.session_state:
-    #     st.session_state.enable_autorefresh = True
-
-    # st.checkbox("Enable Auto Refresh", key='enable_autorefresh') #! value = True??
-
-    # if st.session_state.enable_autorefresh:
-    #     with st.empty():
-    #         for i in range(PAGE_REFRESH, 0, -1):
-    #             st.markdown(f"<p style='text-align:center; color:grey;'>⏳ Auto-refresh in {i}s</p>", unsafe_allow_html=True)
-    #             time.sleep(1)
-    #         st.rerun()
-    #! ====================
-
     # ---- Filters ----
     with st.container():
         col1, col2, col3 = st.columns(3)
@@ -172,7 +155,7 @@ def ShowTimerInfo():
                         st.markdown(f"<div class='circle-container' style='font-size: 50px;'><strong>{row['Location']}</strong>{colorUI}</div>", unsafe_allow_html=True)
                         
                     
-   
+
 
                 with col_timer:
                     color, blink_style = set_timer_style(row['DurationMins'])
@@ -282,7 +265,6 @@ def ShowTimerInfo():
                         else:
                             st.session_state[f'visible_graph_row_{i}'] = "LoadX"
 
-                           
                     if cols[9].button("LoadZ", key=f"btn_LoadZ_{i}"):
                         if st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
                             st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
@@ -358,12 +340,11 @@ def ShowTimerInfo():
 
             if st.session_state.clicked_materialcode:
                 st.markdown('---')
-                st.markdown("### 🔍 Inspection Details")
+                st.markdown("### 🔍 Loading Inspection Details (CTQ & CTP)...")
 
                 materialcode = st.session_state.clicked_materialcode
                 materialdesc = st.session_state.clicked_materialdesc
                 specnoList = get_CTQ_SpecNo_cached(materialcode)
-                #specno = '201' #! hardcoded specno
                 for specno in specnoList['BalloonNo'].unique():
                     df_inspection_data = get_inspection_data_cached(materialcode, specno)
 
