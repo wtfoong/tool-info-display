@@ -225,8 +225,8 @@ def ShowTimerInfo():
                 df = df[cols].reset_index(drop=True)
 
                 # Header row
-                header_cols = st.columns([1, 1, 2, 1, 1,1,2, 1,1,1])
-                header_titles = ['Turret', 'Tool', 'Process','Preset (pcs)','Actual (pcs)', 'Balance (pcs)', 'Balance (mins)','RPM', 'LoadX', 'LoadZ']
+                header_cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1])
+                header_titles = ['Turret', 'Tool', 'Process','Preset (pcs)','Actual (pcs)', 'Balance (pcs)', 'Balance (mins)', 'LoadX', 'LoadZ']
                 for col, title in zip(header_cols, header_titles):
                     col.markdown(f"**{title}**")
                 
@@ -239,7 +239,7 @@ def ShowTimerInfo():
                     if f'visible_graph_row_{i}' not in st.session_state:
                         st.session_state[f'visible_graph_row_{i}'] = None
 
-                    cols = st.columns([1, 1, 2, 1, 1,1,2, 1,1,1])  # Adjust column widths
+                    cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1])  # Adjust column widths
                     cols[0].write(row['Turret'])
                     cols[1].write(str(row['Tool']))
                     cols[2].write(row['Process'])
@@ -248,44 +248,22 @@ def ShowTimerInfo():
                     
                     cols[5].write(str(row['Balance (pcs)']))
                     cols[6].write(str(row['Balance (mins)']))
-                    
-
-
-                    # Toggle button to show/hide graph
-                    if cols[7].button("RPM", key=f"btn_RPM_{i}"):
-                        if st.session_state[f'visible_graph_row_{i}'] == "RPM":
-                            st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
-                        else:
-                            st.session_state[f'visible_graph_row_{i}'] = "RPM"
                         
 
-                    if cols[8].button("LoadX", key=f"btn_LoadX_{i}"):
+                    if cols[7].button("LoadX", key=f"btn_LoadX_{i}"):
                         if st.session_state[f'visible_graph_row_{i}'] == "LoadX":
                             st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
                         else:
                             st.session_state[f'visible_graph_row_{i}'] = "LoadX"
 
-                    if cols[9].button("LoadZ", key=f"btn_LoadZ_{i}"):
+                    if cols[8].button("LoadZ", key=f"btn_LoadZ_{i}"):
                         if st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
                             st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
                         else:
                             st.session_state[f'visible_graph_row_{i}'] = "LoadZ"
                     
-                    if st.session_state[f'visible_graph_row_{i}'] == "RPM":
                         
-                        # Get current datetime and subtract 1 hour
-                        start_date = datetime.now() - timedelta(hours=1)
-
-                        RPMDf = get_questdb_data(Position=row['Turret'],StartDate=start_date,ToolingStation=row['Tool'])
-                        if RPMDf.empty:
-                            st.error(f"No data available for Tool {row['Tool']} (RPMDf).")
-                        else:
-                            fig = plot_RPMGraph(
-                            RPMDf,start_date)
-                            st.pyplot(fig)
-                        st.button("❌ Close",key = f'close_RPM{i}' , on_click=clear_Selected_Graph, args=(i,))
-                        
-                    elif st.session_state[f'visible_graph_row_{i}'] == "LoadX":
+                    if st.session_state[f'visible_graph_row_{i}'] == "LoadX":
                         
                         loadXDf = get_Current_Tool_Column_Data(
                             MachineName=row['MachineID'],
