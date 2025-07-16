@@ -332,7 +332,7 @@ def ShowTimerInfo():
         
                         df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
 
-                        ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0])
+                        ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
 
                         st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc} |SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}`")
                         fig = plot_IMR(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0]) 
