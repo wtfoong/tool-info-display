@@ -450,7 +450,7 @@ def get_CTQ_SpecNo(sapcode):
     BalloonNo
     FROM [QMM].[dbo].[SPCcontrolPlan]
     WHERE 1=1
-    AND [ControlPlanId] IN (SELECT [ControlPlanId] FROM [QMM].[dbo].[SPCcontrolPlanGenInfo] WHERE SAPCode = @SAPCODE AND IsActive = 1  AND DEPARTMENT != 'VEND') and CAT in (2,3)
+    AND [ControlPlanId] IN (SELECT [ControlPlanId] FROM [QMM].[dbo].[SPCcontrolPlanGenInfo] WHERE SAPCode = @SAPCODE AND IsActive = 1  AND DEPARTMENT != 'VEND') and CAT in (2,3) AND SPECTYPE NOT IN (4, 6) AND (IsPassFailGDT != 1 OR IsPassFailGDT IS NULL)
     '''
     df = pd.read_sql(query, conn)
     conn.close()
