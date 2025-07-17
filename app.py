@@ -104,8 +104,6 @@ def ShowTimerInfo():
     with st.container():
         col1, col2, col3 = st.columns([1,30,1])
         
-        
-
         with col2:
             # Header row
             header_cols = st.columns([3, 2, 1, 1])
@@ -117,8 +115,7 @@ def ShowTimerInfo():
                 )
 
 
-            for index, row in filtered_df.iterrows():
-
+            for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
                 col_name, col_timer, col_tool, col_button = st.columns([3, 2, 1, 1])  # adjust ratios as needed
 
@@ -127,36 +124,17 @@ def ShowTimerInfo():
                         'red' if row['MacLEDRed'] else
                         'yellow' if row['MacLEDYellow'] else
                         '#00FF00' if row['MacLEDGreen'] else
-                        'None'
+                        '#373737'
                     )
                     
-                    colorUI = f"""
-                        <style>
-                            .circle-container {{
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: space-around;
-                                    height: 100px; /* Adjust height as needed */
-                            }}
-                            .circle-button {{
-                                    height: 40px;
-                                    width: 40px;
-                                    border-radius: 50%;
-                                    border: 1px solid #000;
-                                    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
-                            }}
-                        </style>
-                        <span class="circle-button" style=" background: {color};"></span>
-                        """
-                    
+                    colorUI = GetTowerLightUI(color)
+
                     if row['TechRequired']:
                         st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭</strong>{colorUI}</div>", unsafe_allow_html=True)
                     else:
-                        st.markdown(f"<div class='circle-container' style='font-size: 50px;'><strong>{row['Location']}</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        st.markdown(f"""
+                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
                         
-                    
-
-
                 with col_timer:
                     color, blink_style = set_timer_style(row['DurationMins'])
 
@@ -193,7 +171,10 @@ def ShowTimerInfo():
                     st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
 
                     # Store selected materialcode for plotting at bottom section
-                    if st.button("Show 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True):
+                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"]
+                    buttonType = "primary" if float(LowestPpk) < 0.7 else "secondary"
+
+                    if st.button(f"{LowestPpk} 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True,type=buttonType):
                         # #toggle off
                         # if st.session_state.clicked_materialcode == row['MaterialCode']:
                         #     st.session_state.clicked_materialcode = None # clear session state
@@ -204,9 +185,6 @@ def ShowTimerInfo():
 
                         st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                     
-
-
-
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
         col1, col2, col3 = st.columns([1,30,1])
@@ -217,6 +195,7 @@ def ShowTimerInfo():
 
             if st.session_state.clicked_location:
                 st.markdown('---')
+                st.button("❌ Close",key = f'close_{st.session_state.clicked_location}' , on_click=clear_selection_clicked_location)
                 st.markdown("### 📋 Upcoming Tool Change")
                 st.info(f"Showing data for: `{st.session_state.clicked_location}`")
 
@@ -271,7 +250,7 @@ def ShowTimerInfo():
                             ToolingStation=row['Tool'],
                             StartDate=row['StartDate']
                         )
-                        
+                        st.button("❌ Close",key = f'close_loadX{i}' , on_click=clear_Selected_Graph, args=(i,))
                         if loadXDf.empty:
                             st.error(f"No data available for Tool {row['Tool']} (Load_X).")
                         else:
@@ -282,7 +261,7 @@ def ShowTimerInfo():
                             )
 
                             st.pyplot(fig)
-                        st.button("❌ Close",key = f'close_loadX{i}' , on_click=clear_Selected_Graph, args=(i,))
+                        
 
                     elif st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
                         loadZDf = get_Current_Tool_Column_Data(
@@ -291,6 +270,7 @@ def ShowTimerInfo():
                             ToolingStation=row['Tool'],
                             StartDate=row['StartDate']
                         )
+                        st.button("❌ Close",key = f'close_loadZ{i}' , on_click=clear_Selected_Graph, args=(i,))
                         if loadZDf.empty:
                             st.error(f"No data available for Tool {row['Tool']} (Load_Z).")
                         else:
@@ -302,10 +282,10 @@ def ShowTimerInfo():
                             )
 
                             st.pyplot(fig)
-                        st.button("❌ Close",key = f'close_loadZ{i}' , on_click=clear_Selected_Graph, args=(i,))
+                        
 
 
-                st.button("❌ Close",key = f'close_{st.session_state.clicked_location}' , on_click=clear_selection_clicked_location)
+                
                 st.markdown('---')
 
     # ---- Bottom Section: Show IMR Chart for clicked_materialcode ----
@@ -323,6 +303,7 @@ def ShowTimerInfo():
                 materialcode = st.session_state.clicked_materialcode
                 materialdesc = st.session_state.clicked_materialdesc
                 specnoList = get_CTQ_SpecNo_cached(materialcode)
+                st.button("❌ Close",key = f'close_{st.session_state.clicked_materialcode}', on_click=clear_selection_clicked_materialcode)
                 for specno in specnoList['BalloonNo'].unique():
                     df_inspection_data = get_inspection_data_cached(materialcode, specno)
 
@@ -334,15 +315,84 @@ def ShowTimerInfo():
 
                         ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
 
-                        st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc} |SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}`")
-                        fig = plot_IMR(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0]) 
+                        st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
+                        title =f"SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}"
+                        fig = plot_IMR(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0],title = title) 
                         st.pyplot(fig)
                     else:
                         st.warning(f"No inspection data available for `{st.session_state.clicked_materialcode}`.")
 
-                st.button("❌ Close",key = f'close_{st.session_state.clicked_materialcode}', on_click=clear_selection_clicked_materialcode)
-                st.markdown('---')
                 
+                st.markdown('---')
+
+def GetTowerLightUI(color):
+    colorUI = f"""
+                        <style>
+                            .circle-container {{
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-around;
+                                    height: 100px; /* Adjust height as needed */
+                            }}
+                            .circle-button {{
+                                    height: 40px;
+                                    width: 40px;
+                                    border-radius: 50%;
+                                    border: 1px solid #000;
+                                    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
+                            }}
+                        </style>
+                        <span class="circle-button" style=" background: {color};"></span>
+                        """
+    return colorUI
+
+@st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
+def CalculateCPK():
+    df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+    filtered_df = df_tool_data.copy()
+    for index, row in filtered_df.iterrows():
+        materialcode = row['MaterialCode']
+        if f'CurrentMachineMaterial_{materialcode}_LowestPpk' not in st.session_state:
+            st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = None
+        
+        specnoList = get_CTQ_SpecNo_cached(materialcode)
+        ppkList = []
+        for specno in specnoList['BalloonNo'].unique():
+            df_inspection_data = get_inspection_data_cached(materialcode, specno)
+
+            if not df_inspection_data.empty:
+                # Calculate ppk
+                df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
+
+                df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
+
+                ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
+                ppkList.append(ppk)
+                
+        if ppkList:
+            min_ppk = min(ppkList)
+            st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
+
+
+
+CalculateCPK()                
 ShowTimerInfo()
+
+with st.container():
+        col1, col2, col3 = st.columns([1,30,1])
+
+        with col2:
+            RedColorUI = GetTowerLightUI('red')
+
+            YellowColorUI = GetTowerLightUI('yellow')
+
+            GreenColorUI = GetTowerLightUI('#00FF00')
+            GreyColorUI = GetTowerLightUI('#373737')
+
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem;'>{RedColorUI} machine E Stop |{YellowColorUI} machine waiting |{GreenColorUI} machine running |{GreyColorUI} machine off | <span>🧑‍🏭</span> Technician Call </div>",
+                    unsafe_allow_html=True)
+
+                
+            st.markdown('---')
 
 # Tooling countdown times
