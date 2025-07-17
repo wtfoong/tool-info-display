@@ -5,6 +5,7 @@ import pandas as pd
 
 # import local module
 from config_loader import load_config
+from streamlit_extras.stylable_container import stylable_container 
 config = load_config()
 
 from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data
@@ -120,14 +121,14 @@ def ShowTimerInfo():
                 col_name, col_timer, col_tool, col_button = st.columns([3, 2, 1, 1])  # adjust ratios as needed
 
                 with col_name:
-                    color = (
+                    backGroundColor = (
                         'red' if row['MacLEDRed'] else
-                        'yellow' if row['MacLEDYellow'] else
+                        '#FFBF00' if row['MacLEDYellow'] else
                         '#00FF00' if row['MacLEDGreen'] else
                         '#373737'
                     )
                     
-                    colorUI = GetTowerLightUI(color)
+                    colorUI = GetTowerLightUI(backGroundColor)
 
                     if row['TechRequired']:
                         st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭</strong>{colorUI}</div>", unsafe_allow_html=True)
@@ -136,7 +137,7 @@ def ShowTimerInfo():
                                     <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
                         
                 with col_timer:
-                    color, blink_style = set_timer_style(row['DurationMins'])
+                    backGroundColor, blink_style = set_timer_style(row['DurationMins'])
 
                     st.markdown(
                         f"""
@@ -145,7 +146,7 @@ def ShowTimerInfo():
                                 50% {{ opacity: 0; }}
                             }}
                         </style>
-                        <div style="color: {color}; font-size: 50px; {blink_style}">
+                        <div style="color: {backGroundColor}; font-size: 50px; {blink_style}">
                             {row['DurationMins']} mins
                         </div>
                         """,
@@ -168,22 +169,32 @@ def ShowTimerInfo():
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
 
                 with col_button:
-                    st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
-
                     # Store selected materialcode for plotting at bottom section
                     LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"]
                     buttonType = "primary" if float(LowestPpk) < 0.7 else "secondary"
+                    backGroundColor = "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
+                    color = "white" if float(LowestPpk) < 0.7 else "black"
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
+                    with stylable_container(
+                        key=f"insp{row['Location']}_button",
+                        css_styles=f"""
+                            button {{
+                                background-color: {backGroundColor};
+                                color: {color};
+                                border: 1px solid #000;
+                            }}
+                            """,
+                    ):
+                        if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True,type=buttonType):
+                            # #toggle off
+                            # if st.session_state.clicked_materialcode == row['MaterialCode']:
+                            #     st.session_state.clicked_materialcode = None # clear session state
+                            # #toggle on
+                            # else:
+                            st.session_state.clicked_materialcode = row['MaterialCode'] # update session state
+                            st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
 
-                    if st.button(f"{LowestPpk} 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True,type=buttonType):
-                        # #toggle off
-                        # if st.session_state.clicked_materialcode == row['MaterialCode']:
-                        #     st.session_state.clicked_materialcode = None # clear session state
-                        # #toggle on
-                        # else:
-                        st.session_state.clicked_materialcode = row['MaterialCode'] # update session state
-                        st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
-
-                        st.session_state.clicked_location = None  # 👈 force close the clicked_location button
+                            st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                     
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
@@ -387,7 +398,7 @@ with st.container():
         with col2:
             RedColorUI = GetTowerLightUI('red')
 
-            YellowColorUI = GetTowerLightUI('yellow')
+            YellowColorUI = GetTowerLightUI('#FFBF00')
 
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
