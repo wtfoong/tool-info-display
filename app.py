@@ -8,7 +8,7 @@ from config_loader import load_config
 config = load_config()
 
 from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data
-from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph
+from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly
 
 # ---- Load app setting from config ----
 
@@ -260,7 +260,8 @@ def ShowTimerInfo():
                                 TotalCounter=row['TotalCounter']
                             )
 
-                            st.pyplot(fig)
+                            #st.pyplot(fig)
+                            st.plotly_chart(fig)
                         
 
                     elif st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
@@ -281,7 +282,8 @@ def ShowTimerInfo():
                                 TotalCounter=row['TotalCounter']
                             )
 
-                            st.pyplot(fig)
+                            #st.pyplot(fig)
+                            st.plotly_chart(fig)
                         
 
 
@@ -290,7 +292,7 @@ def ShowTimerInfo():
 
     # ---- Bottom Section: Show IMR Chart for clicked_materialcode ----
     with st.container():
-        col1, col2, col3 = st.columns([1,4,1])
+        col1, col2, col3 = st.columns([1,30,1])
 
         with col2:
             def clear_selection_clicked_materialcode():
@@ -317,8 +319,9 @@ def ShowTimerInfo():
 
                         st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
                         title =f"SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}"
-                        fig = plot_IMR(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0],title = title) 
-                        st.pyplot(fig)
+                        fig = plotIMRByPlotly(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0],title = title) 
+                        #st.pyplot(fig)
+                        st.plotly_chart(fig)
                     else:
                         st.warning(f"No inspection data available for `{st.session_state.clicked_materialcode}`.")
 

@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+
 plt.style.use('dark_background') # #see all styles --> print(plt.style.available)
 
 # import local module
@@ -145,61 +147,144 @@ def plot_IMR(df, usl, lsl,title):
     plt.tight_layout()
     return fig
 
+def plotIMRByPlotly(df, usl, lsl,title):
+    df = df.sort_values(by='MeasDate').reset_index(drop=True)
 
-def VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn,DataToShow):
+    # Calculate I and MR values
+    df['I'] = df['MeasVal']
+    df['MR'] = df['I'].diff().abs()
+
+    # Calculate control limits
+    I_bar = df['I'].mean()
+    MR_bar = df['MR'][1:].mean() #skips the first NaN in the MR column caused by .diff()
+    UCL_I = I_bar + 2.66 * MR_bar
+    LCL_I = I_bar - 2.66 * MR_bar
+    UCL_MR = 3.268 * MR_bar
+    GUSL,GLSL = find_usl_lsl_for_cpk(df['MeasVal'], target_cpk=1.0) # calculate USL and LSL for Cpk >= 1.0
+    YUSL,YLSL = find_usl_lsl_for_cpk(df['MeasVal'], target_cpk=0.9) # calculate USL and LSL for Cpk >= 1.0
+
+    # Set X-axis as categorical using index (MeasDate are not evenly spaced - very cluttered continuous plot)
+    df['X'] = range(len(df))
+    
+    
+    # Tick selection
+    all_ticks = df['X']
+    selected_ticks = all_ticks
+    if len(selected_ticks) == 0 or selected_ticks.iloc[-1] != all_ticks.iloc[-1]: # show last label too
+        selected_ticks = pd.concat([pd.Series(selected_ticks), pd.Series([all_ticks.iloc[-1]])], ignore_index=True)
+    selected_labels = df['MeasDate'].dt.strftime('%m-%d %H:%M')
+
+    # Create Plotly figure
+    fig = go.Figure()
+
+    # I Chart line
+    fig.add_trace(go.Scatter(x=df['X'], y=df['I'], mode='lines+markers', name='I', marker=dict(color='cyan')))
+
+    # Control lines
+    fig.add_trace(go.Scatter(x=df['X'], y=[I_bar]*len(df), mode='lines', name='I-bar', line=dict(color='green', dash='dash')))
+    fig.add_trace(go.Scatter(x=df['X'], y=[GLSL]*len(df), mode='lines', name='GLSL', line=dict(color='green', dash='dash')))
+    fig.add_trace(go.Scatter(x=df['X'], y=[GUSL]*len(df), mode='lines', name='GUSL', line=dict(color='green', dash='dash')))
+    fig.add_trace(go.Scatter(x=df['X'], y=[YLSL]*len(df), mode='lines', name='YLSL', line=dict(color='#FFBF00', dash='dash')))
+    fig.add_trace(go.Scatter(x=df['X'], y=[YUSL]*len(df), mode='lines', name='YUSL', line=dict(color='#FFBF00', dash='dash')))
+
+    # Simulated USL/LSL values for red lines
+    fig.add_trace(go.Scatter(x=df['X'], y=[usl]*len(df), mode='lines', name='USL', line=dict(color='red', dash='dash')))
+    fig.add_trace(go.Scatter(x=df['X'], y=[lsl]*len(df), mode='lines', name='LSL', line=dict(color='red', dash='dash')))
+
+    # Update layout for dark mode
+    fig.update_layout(
+        title=dict(text=title, 
+        x=0.5,  # Center the title
+        xanchor='center',
+        font=dict(size=16, color='white')
+        ),
+        xaxis=dict(
+            title="Measurement Date",
+            tickmode='array',
+            tickvals=selected_ticks,
+            ticktext=selected_labels,
+            tickangle=45,
+            color='white'
+        ),
+        yaxis=dict(title="Measurement Value", color='white'),
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        font=dict(color='white'),
+        legend=dict(font=dict(color='white'))
+    )
+    return fig
+
+
+# ---- Visualise Data by Plotly ----
+# This function visualises the data using Plotly, including regression lines and annotations.
+def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn,DataToShow):
     df_machineMax = GroupCurrentToolCountNQuestdbValueMax.copy()#.tail(DataToShow).copy()
     df_machineMean = GroupCurrentToolCountNQuestdbValueMean.copy()#.tail(DataToShow).copy()
-    
-    
-    # Create a new figure for each machine
-    fig, (ax1) = plt.subplots(1, 1, figsize=(30, 10), sharex=True)
-    
-    # Plot different parameters for the machine
-    ax1.plot(df_machineMax['Count'],df_machineMax[selectedColumn], label='Max of '+ selectedColumn, color='w',linewidth=1.2, alpha=0.4)
-    ax1.plot(df_machineMean['Count'],df_machineMean[selectedColumn], label='Mean of '+selectedColumn, color='y',linewidth=1.2, alpha=0.4)
-
-    # Compute linear regression for 'Acts' column
+    # Extract data
     xMax = df_machineMax['Count']
-
     yMax = df_machineMax[selectedColumn]
-    slope, intercept, _, _, _ = linregress(xMax, yMax)
-    regression_lineMax = slope * xMax + intercept
-    
-    
     xMean = df_machineMean['Count']
     yMean = df_machineMean[selectedColumn]
-    slope, intercept, _, _, _ = linregress(xMean, yMean)
-    regression_lineMean = slope * xMean + intercept
-    
+
+    # Compute linear regression
+    slopeMax, interceptMax, _, _, _ = linregress(xMax, yMax)
+    regression_lineMax = slopeMax * xMax + interceptMax
+
+    slopeMean, interceptMean, _, _, _ = linregress(xMean, yMean)
+    regression_lineMean = slopeMean * xMean + interceptMean
+
     # Determine color based on slope sign
-    color = "red" #if slope > 0 else "red"
-    #plt.ylim(0, 30)
-    
-    # Plot regression line with dynamic color
-    ax1.plot(xMax, regression_lineMax, linestyle="--", color=color, label="Linear Regression (max)", linewidth=4)
-    ax1.plot(xMean, regression_lineMean, linestyle=":", color=color, label="Linear Regression (mean)", linewidth=4)
-    
-    
-    # Annotate 6 points on each regression line: start, end, and 4 evenly spaced points
+    colorMax = "red"  # Customize based on slopeMax if needed
+    colorMean = "red"  # Customize based on slopeMean if needed
+
+    # Create Plotly figure
+    fig = go.Figure()
+
+    # Add max and mean lines
+    fig.add_trace(go.Scatter(x=xMax, y=yMax, mode='lines', name='Max of ' + selectedColumn,
+                            line=dict(color='white', width=1.2), opacity=0.4))
+    fig.add_trace(go.Scatter(x=xMean, y=yMean, mode='lines', name='Mean of ' + selectedColumn,
+                            line=dict(color='yellow', width=1.2), opacity=0.4))
+
+    # Add regression lines
+    fig.add_trace(go.Scatter(x=xMax, y=regression_lineMax, mode='lines', name='Linear Regression (max)',
+                            line=dict(color=colorMax, width=4, dash='dash')))
+    fig.add_trace(go.Scatter(x=xMean, y=regression_lineMean, mode='lines', name='Linear Regression (mean)',
+                            line=dict(color=colorMean, width=4, dash='dot')))
+
+    # Annotate 6 points on each regression line
     def annotate_points(x, y, label_prefix):
         indices = np.linspace(0, len(x) - 1, 6, dtype=int)
         for i in indices:
-            ax1.text(x[i], y[i], f'{label_prefix}: {y[i]:.2f}', fontsize=15, ha='center', va='bottom',color='red',backgroundcolor='white', bbox=dict(facecolor='white', edgecolor='none', boxstyle='round,pad=0.1'))
+            fig.add_trace(go.Scatter(
+                x=[x[i]], y=[y[i]],
+                mode='text',
+                text=[f'{label_prefix}: {y[i]:.2f}'],
+                textposition='top center',
+                textfont=dict(size=15, color='red'),
+                marker=dict(color='white'),
+                showlegend=False
+            ))
 
     annotate_points(xMax, regression_lineMax, 'Max')
     annotate_points(xMean, regression_lineMean, 'Mean')
 
-
-    ToolingStation = df_machineMax['ToolingStation'].iloc[0]
     # Add labels and title
-    ax1.set_title(f'Tooling Station {ToolingStation} | Column {selectedColumn}',fontsize=16, fontweight='bold')
-    
-    ax1.set_xlabel('Smartbox Count')
-    ax1.set_ylabel(selectedColumn)
-    ax1.legend()
-    ax1.tick_params(axis='x', rotation=45)
-
-    ax1.grid(False)
+    ToolingStation = df_machineMax['ToolingStation'].iloc[0]
+    fig.update_layout(
+        title=dict(text=f'Tooling Station {ToolingStation} | Column {selectedColumn}',
+        x=0.5,  # Center the title
+        xanchor='center',
+        font=dict(size=16, color='white')
+        ),
+        xaxis_title='Output Count',
+        yaxis_title=selectedColumn,
+        legend_title='Legend',
+        width=1200,
+        height=400,
+        xaxis=dict(tickangle=45),
+        plot_bgcolor='black'
+    )
     return fig
 
 # ---- plot Selected Column by pieces made ----
@@ -208,7 +293,7 @@ def plot_selected_columns_by_pieces_made(df, selectedColumn,TotalCounter, DataTo
     GroupCurrentToolCountNQuestdbValueMean = GroupDfByPiecesMade(df,False)
     GroupCurrentToolCountNQuestdbValueMax = GroupCurrentToolCountNQuestdbValueMax[GroupCurrentToolCountNQuestdbValueMax['Count']<=TotalCounter]
     GroupCurrentToolCountNQuestdbValueMean = GroupCurrentToolCountNQuestdbValueMean[GroupCurrentToolCountNQuestdbValueMean['Count']<=TotalCounter]
-    fig = VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)
+    fig = VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)#VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)
     return fig
     
 # ---- plot RPM ----
