@@ -79,7 +79,7 @@ def GroupDfByPiecesMade(df, IsMax=True):
     return GroupCurrentToolCountNQuestdbValue
 
 # ---- plot IMR ----
-def plot_IMR(df, usl, lsl):
+def plot_IMR(df, usl, lsl,title):
 
     df = df.sort_values(by='MeasDate').reset_index(drop=True)
 
@@ -121,7 +121,7 @@ def plot_IMR(df, usl, lsl):
     # ax1.axhline(LCL_I, color='#FFBF00', linestyle='--', label='LCL', lw=0.9)
     ax1.axhline(usl, color='red', linestyle='--', label='USL', lw=0.9)
     ax1.axhline(lsl, color='red', linestyle='--', label='LSL', lw=0.9)
-    ax1.set_title(f"Individual (I) Chart")
+    ax1.set_title(title, fontsize=16, fontweight='bold')
     ax1.set_ylabel("Measurement Value")
 
     # Set spine (border) thickness
@@ -147,16 +147,16 @@ def plot_IMR(df, usl, lsl):
 
 
 def VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn,DataToShow):
-    df_machineMax = GroupCurrentToolCountNQuestdbValueMax.tail(DataToShow).copy()
-    df_machineMean = GroupCurrentToolCountNQuestdbValueMean.tail(DataToShow).copy()
+    df_machineMax = GroupCurrentToolCountNQuestdbValueMax.copy()#.tail(DataToShow).copy()
+    df_machineMean = GroupCurrentToolCountNQuestdbValueMean.copy()#.tail(DataToShow).copy()
     
     
     # Create a new figure for each machine
     fig, (ax1) = plt.subplots(1, 1, figsize=(30, 10), sharex=True)
     
     # Plot different parameters for the machine
-    ax1.plot(df_machineMax['Count'],df_machineMax[selectedColumn], label='Max of '+ selectedColumn, color='w',linewidth=2)
-    ax1.plot(df_machineMean['Count'],df_machineMean[selectedColumn], label='Mean of '+selectedColumn, color='y',linewidth=2)
+    ax1.plot(df_machineMax['Count'],df_machineMax[selectedColumn], label='Max of '+ selectedColumn, color='w',linewidth=1.2, alpha=0.4)
+    ax1.plot(df_machineMean['Count'],df_machineMean[selectedColumn], label='Mean of '+selectedColumn, color='y',linewidth=1.2, alpha=0.4)
 
     # Compute linear regression for 'Acts' column
     xMax = df_machineMax['Count']
@@ -177,10 +177,22 @@ def VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQu
     
     # Plot regression line with dynamic color
     ax1.plot(xMax, regression_lineMax, linestyle="--", color=color, label="Linear Regression (max)", linewidth=4)
-    ax1.plot(xMean, regression_lineMean, linestyle="--", color=color, label="Linear Regression (mean)", linewidth=4)
+    ax1.plot(xMean, regression_lineMean, linestyle=":", color=color, label="Linear Regression (mean)", linewidth=4)
+    
+    
+    # Annotate 6 points on each regression line: start, end, and 4 evenly spaced points
+    def annotate_points(x, y, label_prefix):
+        indices = np.linspace(0, len(x) - 1, 6, dtype=int)
+        for i in indices:
+            ax1.text(x[i], y[i], f'{label_prefix}: {y[i]:.2f}', fontsize=15, ha='center', va='bottom',color='red',backgroundcolor='white', bbox=dict(facecolor='white', edgecolor='none', boxstyle='round,pad=0.1'))
+
+    annotate_points(xMax, regression_lineMax, 'Max')
+    annotate_points(xMean, regression_lineMean, 'Mean')
+
+
     ToolingStation = df_machineMax['ToolingStation'].iloc[0]
     # Add labels and title
-    ax1.set_title(f'Tooling Station {ToolingStation} | Column {selectedColumn}')
+    ax1.set_title(f'Tooling Station {ToolingStation} | Column {selectedColumn}',fontsize=16, fontweight='bold')
     
     ax1.set_xlabel('Smartbox Count')
     ax1.set_ylabel(selectedColumn)
