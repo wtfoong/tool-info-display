@@ -403,7 +403,7 @@ with st.container():
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
 
-            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem;'>{RedColorUI} machine E Stop |{YellowColorUI} machine waiting |{GreenColorUI} machine running |{GreyColorUI} machine off | <span>🧑‍🏭</span> Technician Call </div>",
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem;'>{RedColorUI} machine E Stop |{YellowColorUI} machine waiting |{GreenColorUI} machine running |{GreyColorUI} machine off | <span style='font-size: 40px;'>🧑‍🏭</span> Technician Call </div>",
                     unsafe_allow_html=True)
 
                 
