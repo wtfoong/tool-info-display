@@ -231,11 +231,20 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
     
 
     slopeMean, interceptMean, _, _, _ = linregress(xMean, yMean)
-   
+    multiplyValue = 2
     
+    if DataToPredict >= 5000:
+        multiplyValue = 1.2
+    elif DataToPredict >= 2000:
+        multiplyValue = 1.5
     
-    # Generate future x values up to 500
-    x_future = np.arange(min(xMax.min(), xMean.min()), (DataToPredict+1)*2)
+    # Compute the start value safely
+    start_value = min(xMax.min(), xMean.min())
+    if start_value == 0:
+        start_value = 1  # Ensure it's explicitly set to 1 if both are zero
+
+    # Generate future x values
+    x_future = np.arange(0, (DataToPredict*multiplyValue)+1)
     regression_lineMax = slopeMax * x_future + interceptMax
     regression_lineMean = slopeMean * x_future + interceptMean
 
@@ -252,9 +261,9 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
     fig.add_trace(go.Scatter(x=xMean, y=yMean, mode='lines', name='Mean of ' + selectedColumn,
                             line=dict(color='yellow', width=1.2), opacity=0.4))
 
-             # Annotate 6 points on each regression line
-    def annotate_points(x, y, label_prefix):
-        indices = np.linspace(0, len(x) - 1, 6, dtype=int)
+    # Annotate 6 points on each regression line
+    def annotate_points(x, y, label_prefix,setIndex = 6):
+        indices = np.linspace(0, len(x) - 1, setIndex, dtype=int)
         for i in indices:
             fig.add_trace(go.Scatter(
                 x=[x[i]], y=[y[i]],
@@ -265,8 +274,12 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
                 marker=dict(color='white'),
                 showlegend=False
             ))
-    if len(xMax) > 199:
-        # Add regression lines
+    # Add labels and title
+    ToolingStation = df_machineMax['ToolingStation'].iloc[0]
+    dataCountForPrediction = 1000 if DataToPredict*0.5 > 1000 else DataToPredict*0.5
+    title = f'Tooling Station {ToolingStation} | Column {selectedColumn} |  Prediction Requires ≥ {dataCountForPrediction:.0f} pcs'
+    if len(xMax) > 1000 or len(xMax)>DataToPredict*0.5:
+        #Add regression lines
         fig.add_trace(go.Scatter(x=x_future, y=regression_lineMax, mode='lines', name='Linear Regression (max)',
                                 line=dict(color=colorMax, width=2, dash='dash')))
         fig.add_trace(go.Scatter(x=x_future, y=regression_lineMean, mode='lines', name='Linear Regression (mean)',
@@ -281,24 +294,26 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
                                 line=dict(color=colorMax, width=2, dash='dash')))
         fig.add_trace(go.Scatter(x=xMean, y=regression_lineMean, mode='lines', name='Linear Regression (mean)',
                                 line=dict(color=colorMean, width=2, dash='dot')))
-        annotate_points(xMax, regression_lineMax, 'Max')
-        annotate_points(xMean, regression_lineMean, 'Mean')
+        annotate_points(xMax, regression_lineMax, 'Max',2)
+        annotate_points(xMean, regression_lineMean, 'Mean',2)
 
 
     fig.add_shape(
-        type="line",
-        x0=DataToPredict, y0=min(min(yMax), min(yMean)),
-        x1=DataToPredict, y1=max(max(yMax), max(yMean)),
-        line=dict(color="white", width=2, dash="dash"),
+            type="line",
+            x0=DataToPredict, y0=min(min(yMax), min(yMean)),
+            x1=DataToPredict, y1=max(max(yMax), max(yMean)),
+            line=dict(color="white", width=2, dash="dash"),
     )
-
-
-   
-
-    # Add labels and title
-    ToolingStation = df_machineMax['ToolingStation'].iloc[0]
+    
+    fig.add_shape(
+            type="line",
+            x0=len(x_future), y0=min(min(yMax), min(yMean)),
+            x1=len(x_future), y1=max(max(yMax), max(yMean)),
+            line=dict(color="black", width=2, dash="dash"),
+    )
+    
     fig.update_layout(
-        title=dict(text=f'Tooling Station {ToolingStation} | Column {selectedColumn}',
+        title=dict(text=title,
         x=0.5,  # Center the title
         xanchor='center',
         font=dict(size=16, color='white')
