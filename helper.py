@@ -217,9 +217,9 @@ def plotIMRByPlotly(df, usl, lsl,title):
 
 # ---- Visualise Data by Plotly ----
 # This function visualises the data using Plotly, including regression lines and annotations.
-def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn,DataToShow):
-    df_machineMax = GroupCurrentToolCountNQuestdbValueMax.copy()#.tail(DataToShow).copy()
-    df_machineMean = GroupCurrentToolCountNQuestdbValueMean.copy()#.tail(DataToShow).copy()
+def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn,DataToPredict):
+    df_machineMax = GroupCurrentToolCountNQuestdbValueMax.copy()#.tail(200).copy()
+    df_machineMean = GroupCurrentToolCountNQuestdbValueMean.copy()#.tail(200).copy()
     # Extract data
     xMax = df_machineMax['Count']
     yMax = df_machineMax[selectedColumn]
@@ -228,10 +228,16 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
 
     # Compute linear regression
     slopeMax, interceptMax, _, _, _ = linregress(xMax, yMax)
-    regression_lineMax = slopeMax * xMax + interceptMax
+    
 
     slopeMean, interceptMean, _, _, _ = linregress(xMean, yMean)
-    regression_lineMean = slopeMean * xMean + interceptMean
+   
+    
+    
+    # Generate future x values up to 500
+    x_future = np.arange(min(xMax.min(), xMean.min()), (DataToPredict+1)*2)
+    regression_lineMax = slopeMax * x_future + interceptMax
+    regression_lineMean = slopeMean * x_future + interceptMean
 
     # Determine color based on slope sign
     colorMax = "red"  # Customize based on slopeMax if needed
@@ -246,13 +252,7 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
     fig.add_trace(go.Scatter(x=xMean, y=yMean, mode='lines', name='Mean of ' + selectedColumn,
                             line=dict(color='yellow', width=1.2), opacity=0.4))
 
-    # Add regression lines
-    fig.add_trace(go.Scatter(x=xMax, y=regression_lineMax, mode='lines', name='Linear Regression (max)',
-                            line=dict(color=colorMax, width=4, dash='dash')))
-    fig.add_trace(go.Scatter(x=xMean, y=regression_lineMean, mode='lines', name='Linear Regression (mean)',
-                            line=dict(color=colorMean, width=4, dash='dot')))
-
-    # Annotate 6 points on each regression line
+             # Annotate 6 points on each regression line
     def annotate_points(x, y, label_prefix):
         indices = np.linspace(0, len(x) - 1, 6, dtype=int)
         for i in indices:
@@ -265,9 +265,35 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
                 marker=dict(color='white'),
                 showlegend=False
             ))
+    if len(xMax) > 199:
+        # Add regression lines
+        fig.add_trace(go.Scatter(x=x_future, y=regression_lineMax, mode='lines', name='Linear Regression (max)',
+                                line=dict(color=colorMax, width=2, dash='dash')))
+        fig.add_trace(go.Scatter(x=x_future, y=regression_lineMean, mode='lines', name='Linear Regression (mean)',
+                                line=dict(color=colorMean, width=2, dash='dot')))
 
-    annotate_points(xMax, regression_lineMax, 'Max')
-    annotate_points(xMean, regression_lineMean, 'Mean')
+
+        annotate_points(x_future, regression_lineMax, 'Max')
+        annotate_points(x_future, regression_lineMean, 'Mean')
+    else:
+        # Add regression lines
+        fig.add_trace(go.Scatter(x=xMax, y=regression_lineMax, mode='lines', name='Linear Regression (max)',
+                                line=dict(color=colorMax, width=2, dash='dash')))
+        fig.add_trace(go.Scatter(x=xMean, y=regression_lineMean, mode='lines', name='Linear Regression (mean)',
+                                line=dict(color=colorMean, width=2, dash='dot')))
+        annotate_points(xMax, regression_lineMax, 'Max')
+        annotate_points(xMean, regression_lineMean, 'Mean')
+
+
+    fig.add_shape(
+        type="line",
+        x0=DataToPredict, y0=min(min(yMax), min(yMean)),
+        x1=DataToPredict, y1=max(max(yMax), max(yMean)),
+        line=dict(color="white", width=2, dash="dash"),
+    )
+
+
+   
 
     # Add labels and title
     ToolingStation = df_machineMax['ToolingStation'].iloc[0]
@@ -288,12 +314,12 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
     return fig
 
 # ---- plot Selected Column by pieces made ----
-def plot_selected_columns_by_pieces_made(df, selectedColumn,TotalCounter, DataToShow=200):
+def plot_selected_columns_by_pieces_made(df, selectedColumn,TotalCounter,PresetCounter, DataToShow=200):
     GroupCurrentToolCountNQuestdbValueMax = GroupDfByPiecesMade(df)
     GroupCurrentToolCountNQuestdbValueMean = GroupDfByPiecesMade(df,False)
     GroupCurrentToolCountNQuestdbValueMax = GroupCurrentToolCountNQuestdbValueMax[GroupCurrentToolCountNQuestdbValueMax['Count']<=TotalCounter]
     GroupCurrentToolCountNQuestdbValueMean = GroupCurrentToolCountNQuestdbValueMean[GroupCurrentToolCountNQuestdbValueMean['Count']<=TotalCounter]
-    fig = VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)#VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)
+    fig = VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, PresetCounter)#VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)
     return fig
     
 # ---- plot RPM ----

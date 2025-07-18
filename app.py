@@ -268,7 +268,8 @@ def ShowTimerInfo():
                             fig = plot_selected_columns_by_pieces_made(
                                 loadXDf,
                                 selectedColumn='Load_X',
-                                TotalCounter=row['TotalCounter']
+                                TotalCounter=row['TotalCounter'],
+                                PresetCounter=row['PresetCounter']
                             )
 
                             #st.pyplot(fig)
@@ -290,7 +291,8 @@ def ShowTimerInfo():
                             fig = plot_selected_columns_by_pieces_made(
                                 loadZDf,
                                 selectedColumn='Load_Z',
-                                TotalCounter=row['TotalCounter']
+                                TotalCounter=row['TotalCounter'],
+                                PresetCounter=row['PresetCounter']
                             )
 
                             #st.pyplot(fig)
@@ -387,9 +389,7 @@ def CalculateCPK():
             min_ppk = min(ppkList)
             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
 
-
-
-CalculateCPK()                
+CalculateCPK()      
 ShowTimerInfo()
 
 with st.container():
