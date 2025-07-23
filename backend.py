@@ -79,7 +79,8 @@ def load_data(limit: int = 1000):
         SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, TL.IsActiveTool,
         TL.StartDate, GetDate() CompletedDate,TN.ToolPieces,
         mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        ISNULL(mmTool.PresetCounter,0)PresetCounter
+        ISNULL(mmTool.PresetCounter,0)PresetCounter,
+        mmTool.LoadX_Alm,mmTool.LoadZ_Alm
         INTO #ToolLife FROM ToolLife TL
         INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
         ON TL.ToolNoId=TN.Id
@@ -112,9 +113,9 @@ def load_data(limit: int = 1000):
         AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
 
         ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,StartDate
+        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm
         INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,StartDate
+        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,LoadX_Alm,LoadZ_Alm
         ORDER BY MachineID,ToolingMainCategory,ToolingStation
 
         SELECT #TL.*,(#TL.PresetCounter-#TL.TotalCounter) Balance, 
@@ -138,7 +139,7 @@ def load_data(limit: int = 1000):
             AND TI.ToolingStation = TC.ToolStation
 
         UPDATE #ToolInfo SET Balance=0 WHERE Balance<0
-        UPDATE #ToolInfo SET DurationMins=(Balance*ISNULL(MesCT,0))/60
+        UPDATE #ToolInfo SET DurationMins=(Balance*MesCT)/60
         ------------------------------------------- ToolLife Summary ------------------------------------
         DECLARE @RowNum INT=1
         DECLARE @TotalRow INT
@@ -155,6 +156,7 @@ def load_data(limit: int = 1000):
         BalanceCounter INT,
         DurationMins INT,
         TechRequired BIT,
+        TechRequestMin INT,
         MacLEDGreen BIT,
         MacLEDYellow BIT,
         MacLEDRed BIT,
@@ -164,7 +166,7 @@ def load_data(limit: int = 1000):
         WHILE @RowNum <= @TotalRow
         BEGIN
             INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0 
+                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0 
             FROM #ToolInfo
             WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
@@ -179,9 +181,10 @@ def load_data(limit: int = 1000):
         SELECT TOP 1 @ProdnShift=Shift,@PrevDay=CAST(PreviousDay AS INT) FROM mdm.dbo.TSHIFT
         WHERE Plant=@Plant AND ISNULL(DelFlag,0)=0 AND CAST(getdate() AS TIME)
         BETWEEN StartTime AND EndTime
-        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
+        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
 
-        SELECT DT.ID,Kep.MacID,DT.TechRequired
+        SELECT DT.ID,Kep.MacID,DT.TechRequired,
+        DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin
         INTO #DT FROM [SPLOEE].[dbo].[OEEDownTime] DT
         LEFT OUTER JOIN [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep ON DT.ID=Kep.ID
         WHERE Kep.ProdnDate=@ProdnDate AND Kep.ProdnShift=@ProdnShift
@@ -190,7 +193,8 @@ def load_data(limit: int = 1000):
         ORDER BY MacID DESC
 
         UPDATE #ToolSummary
-        SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0)
+        SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0),
+            #ToolSummary.TechRequestMin=ISNULL(#DT.TechRequestMin,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #DT ON #DT.MacID=#ToolSummary.MachineID
 
@@ -244,6 +248,7 @@ def load_data(limit: int = 1000):
                     'BalanceCounter': [136,125],
                     'DurationMins': [10,135],
                     'TechRequired': [False,False],
+                    'TechRequestMin':0,
                     'MacLEDGreen': [False,False],
                     'MacLEDYellow': [False,False],
                     'MacLEDRed': [False,True],
@@ -266,7 +271,8 @@ def load_data_all():
         SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, TL.IsActiveTool,
         TL.StartDate, GetDate() CompletedDate,TN.ToolPieces,
         mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        ISNULL(mmTool.PresetCounter,0)PresetCounter
+        ISNULL(mmTool.PresetCounter,0)PresetCounter,
+        mmTool.LoadX_Alm,mmTool.LoadZ_Alm
         INTO #ToolLife FROM ToolLife TL
         INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
         ON TL.ToolNoId=TN.Id
@@ -299,9 +305,9 @@ def load_data_all():
         AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
 
         ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,StartDate
+        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm
         INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,StartDate
+        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm
         ORDER BY MachineID,ToolingMainCategory,ToolingStation
 
         SELECT #TL.*,(#TL.PresetCounter-#TL.TotalCounter) Balance, 
@@ -325,7 +331,7 @@ def load_data_all():
             AND TI.ToolingStation = TC.ToolStation
 
         UPDATE #ToolInfo SET Balance=0 WHERE Balance<0
-        UPDATE #ToolInfo SET DurationMins=(Balance*ISNULL(MesCT,0))/60
+        UPDATE #ToolInfo SET DurationMins=(Balance*MesCT)/60
         ------------------------------------------- ToolLife Summary ------------------------------------
         DECLARE @RowNum INT=1
         DECLARE @TotalRow INT
@@ -342,6 +348,7 @@ def load_data_all():
         BalanceCounter INT,
         DurationMins INT,
         TechRequired BIT,
+        TechRequestMin INT,
         MacLEDGreen BIT,
         MacLEDYellow BIT,
         MacLEDRed BIT,
@@ -351,7 +358,7 @@ def load_data_all():
         WHILE @RowNum <= @TotalRow
         BEGIN
             INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0 
+                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0 
             FROM #ToolInfo
             WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
@@ -366,9 +373,10 @@ def load_data_all():
         SELECT TOP 1 @ProdnShift=Shift,@PrevDay=CAST(PreviousDay AS INT) FROM mdm.dbo.TSHIFT
         WHERE Plant=@Plant AND ISNULL(DelFlag,0)=0 AND CAST(getdate() AS TIME)
         BETWEEN StartTime AND EndTime
-        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
+        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
 
-        SELECT DT.ID,Kep.MacID,DT.TechRequired
+        SELECT DT.ID,Kep.MacID,DT.TechRequired,
+        DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin
         INTO #DT FROM [SPLOEE].[dbo].[OEEDownTime] DT
         LEFT OUTER JOIN [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep ON DT.ID=Kep.ID
         WHERE Kep.ProdnDate=@ProdnDate AND Kep.ProdnShift=@ProdnShift
@@ -377,7 +385,8 @@ def load_data_all():
         ORDER BY MacID DESC
 
         UPDATE #ToolSummary
-        SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0)
+        SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0),
+            #ToolSummary.TechRequestMin=ISNULL(#DT.TechRequestMin,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #DT ON #DT.MacID=#ToolSummary.MachineID
 
@@ -415,7 +424,7 @@ def load_data_all():
 
 
         SELECT
-        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter
+        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm
         FROM #ToolInfo
         ORDER BY Location, DurationMins
 
@@ -579,7 +588,7 @@ def get_questdb_data(Position,StartDate, ToolingStation):
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
 
-def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate):
+def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn,AlarmFilter):
     OT_DataLake_df = get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate)
     Questdb_df = get_questdb_data(Position,StartDate, ToolingStation)
     if OT_DataLake_df.empty and Questdb_df.empty:
@@ -607,29 +616,30 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate):
     #filters
     #filter all data that have time diff of 5s and above with next row
     # Calculate time difference between consecutive rows
-    if ToolingStation == 303:
-        CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['Load_Z'] <= 70]
-    else:
-        CurrentToolCountNQuestdbdf['time_diff'] = CurrentToolCountNQuestdbdf['Timestamp'].diff().dt.total_seconds()
-        # Identify indices where the time difference is greater than 5 seconds
-        indices_to_remove = CurrentToolCountNQuestdbdf.index[CurrentToolCountNQuestdbdf['time_diff'] > 5].tolist()
+    # if ToolingStation == 303:
+    #     CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['Load_Z'] <= 70]
+    # else:
+    #     CurrentToolCountNQuestdbdf['time_diff'] = CurrentToolCountNQuestdbdf['Timestamp'].diff().dt.total_seconds()
+    #     # Identify indices where the time difference is greater than 5 seconds
+    #     indices_to_remove = CurrentToolCountNQuestdbdf.index[CurrentToolCountNQuestdbdf['time_diff'] > 5].tolist()
         
-        # Also remove the previous row for each identified index
-        indices_to_remove += [i - 1 for i in indices_to_remove if i - 1 >= 0]
+    #     # Also remove the previous row for each identified index
+    #     indices_to_remove += [i - 1 for i in indices_to_remove if i - 1 >= 0]
         
-        # Drop duplicates and sort the indices
-        indices_to_remove = sorted(set(indices_to_remove))
+    #     # Drop duplicates and sort the indices
+    #     indices_to_remove = sorted(set(indices_to_remove))
         
-        # Drop the rows from the DataFrame
+    #     # Drop the rows from the DataFrame
 
-        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(index=indices_to_remove).reset_index(drop=True)
+    #     CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(index=indices_to_remove).reset_index(drop=True)
 
-        # Drop the helper column
-        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns='time_diff')
+    #     # Drop the helper column
+    #     CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns='time_diff')
         
-        CurrentToolCountNQuestdbdf['percent_diff'] = abs(CurrentToolCountNQuestdbdf['SpdlSpd_RPM'] - CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP']) / CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP'] * 100
-        CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['percent_diff'] <= 2]
-    
+    #     CurrentToolCountNQuestdbdf['percent_diff'] = abs(CurrentToolCountNQuestdbdf['SpdlSpd_RPM'] - CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP']) / CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP'] * 100
+    #     CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['percent_diff'] <= 2]
+    AlarmFilter = AlarmFilter*1.1 # add 10% buffer to alarm filter
+    CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[AlarmColumn] <= AlarmFilter]
 
 
     #CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[selectedColumn]<=CutOffValue]
