@@ -40,8 +40,8 @@ def get_CTQ_SpecNo_cached(sapcode):
     return df_inspection_data
 
 @st.cache_data(ttl= INSPECTION_DATA_CACHE)
-def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate):
-    df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate)
+def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter):
+    df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter)
     return df_Tool_Data
 
 
@@ -131,11 +131,11 @@ def ShowTimerInfo():
                     colorUI = GetTowerLightUI(backGroundColor)
 
                     if row['TechRequired']:
-                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} min(s)</strong>{colorUI}</div>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
-                        
+                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} min(s)</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
+
                 with col_timer:
                     backGroundColor, blink_style = set_timer_style(row['DurationMins'])
 
@@ -210,7 +210,7 @@ def ShowTimerInfo():
                 st.markdown("### 📋 Upcoming Tool Change")
                 st.info(f"Showing data for: `{st.session_state.clicked_location}`")
 
-                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter']
+                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location]
                 df = df[cols].reset_index(drop=True)
 
@@ -259,7 +259,9 @@ def ShowTimerInfo():
                             MachineName=row['MachineID'],
                             Position=row['Turret'],
                             ToolingStation=row['Tool'],
-                            StartDate=row['StartDate']
+                            StartDate=row['StartDate'],
+                            AlarmColumn='Load_X',
+                            AlarmFilter=row['LoadX_Alm']
                         )
                         st.button("❌ Close",key = f'close_loadX{i}' , on_click=clear_Selected_Graph, args=(i,))
                         if loadXDf.empty:
@@ -281,7 +283,9 @@ def ShowTimerInfo():
                             MachineName=row['MachineID'],
                             Position=row['Turret'],
                             ToolingStation=row['Tool'],
-                            StartDate=row['StartDate']
+                            StartDate=row['StartDate'],
+                            AlarmColumn='Load_Z',
+                            AlarmFilter=row['LoadZ_Alm']
                         )
                         st.button("❌ Close",key = f'close_loadZ{i}' , on_click=clear_Selected_Graph, args=(i,))
                         if loadZDf.empty:
