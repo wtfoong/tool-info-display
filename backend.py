@@ -781,7 +781,6 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
 
         DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo
         '''
-        print(query)
         df = pd.read_sql(query, conn)
         conn.close()
         

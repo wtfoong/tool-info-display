@@ -145,10 +145,10 @@ def ShowTimerInfo():
                     colorUI = GetTowerLightUI(backGroundColor)
 
                     if row['TechRequired']:
-                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} min(s)</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} mins</strong>{colorUI}</div>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} min(s)</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
+                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} mins</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
 
                 with col_timer:
                     backGroundColor, blink_style = set_timer_style(row['DurationMins'])
@@ -448,9 +448,7 @@ def ShowTimerInfo():
                             st.error("Start Date must be earlier than or equal to End Date.")
                             st.session_state.clicked_search_History = None
                         else:
-                            print('testing search')
                             st.session_state.clicked_search_History = st.session_state.clicked_machineID_History
-                            print(st.session_state.clicked_search_History)
 
 
                 if st.session_state.clicked_search_History:
@@ -510,7 +508,6 @@ def ShowTimerInfo():
                                 st.session_state[f'visible_history_graph_row_{i}'] = "LoadZ"
 
                         if st.session_state[f'visible_history_graph_row_{i}'] == "LoadX":
-                            print(row['CompletedDate'])
                             loadXDf = get_Current_Tool_Column_Data(
                                 MachineName=row['MachineID'],
                                 Position=row['Turret'],
