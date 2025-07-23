@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime,timedelta
+from datetime import datetime,timedelta,date
 import time
 import pandas as pd
 
@@ -8,7 +8,7 @@ from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container 
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data
 from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly
 
 # ---- Load app setting from config ----
@@ -40,8 +40,13 @@ def get_CTQ_SpecNo_cached(sapcode):
     return df_inspection_data
 
 @st.cache_data(ttl= INSPECTION_DATA_CACHE)
-def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter):
-    df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter)
+def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter,historyFlag=False, EndDate=None):
+    df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter,historyFlag=historyFlag, EndDate=EndDate)
+    return df_Tool_Data
+
+
+def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDate):
+    df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation,StartDate,EndDate)
     return df_Tool_Data
 
 
@@ -81,6 +86,15 @@ if 'clicked_location' not in st.session_state:
     
 if 'clicked_materialdesc' not in st.session_state:
     st.session_state.clicked_materialdesc = None
+    
+if 'clicked_location_History' not in st.session_state:
+    st.session_state.clicked_location_History = None
+    
+if 'clicked_machineID_History' not in st.session_state:
+    st.session_state.clicked_machineID_History = None
+
+if 'clicked_search_History' not in st.session_state:
+    st.session_state.clicked_search_History = None
 
 # ---- Information Display ----
 
@@ -107,8 +121,8 @@ def ShowTimerInfo():
         
         with col2:
             # Header row
-            header_cols = st.columns([3, 2, 1, 1])
-            header_titles = ['Machine Condition', 'Count Down', 'Tool Detail', 'Inspection Detail']
+            header_cols = st.columns([3, 2, 1, 1,1])
+            header_titles = ['Machine Condition', 'Count Down', 'Tool Detail', 'Inspection Detail','History']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
                     f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",
@@ -118,7 +132,7 @@ def ShowTimerInfo():
 
             for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
-                col_name, col_timer, col_tool, col_button = st.columns([3, 2, 1, 1])  # adjust ratios as needed
+                col_name, col_timer, col_tool, col_button, col_history = st.columns([3, 2, 1, 1,1])  # adjust ratios as needed
 
                 with col_name:
                     backGroundColor = (
@@ -131,10 +145,10 @@ def ShowTimerInfo():
                     colorUI = GetTowerLightUI(backGroundColor)
 
                     if row['TechRequired']:
-                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} min(s)</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} mins</strong>{colorUI}</div>", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} min(s)</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
+                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} mins</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
 
                 with col_timer:
                     backGroundColor, blink_style = set_timer_style(row['DurationMins'])
@@ -167,6 +181,8 @@ def ShowTimerInfo():
 
                         st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
+                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
 
                 with col_button:
                     # Store selected materialcode for plotting at bottom section
@@ -195,6 +211,24 @@ def ShowTimerInfo():
                             st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
 
                             st.session_state.clicked_location = None  # 👈 force close the clicked_location button
+                            st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                            st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+
+                with col_history:
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
+                    # Store selected location for showing details at bottom section
+                    if st.button("History 🛠️", key=f"btn_{row['Location']}_History", use_container_width=True):
+                        # #toggle off
+                        # if st.session_state.clicked_location == row['Location']:
+                        #     st.session_state.clicked_location = None # clear session state
+                        # #toggle on
+                        # else:
+                        st.session_state.clicked_location_History = row['Location'] # update session state
+                        st.session_state.clicked_machineID_History = row['MachineID'] # update session state
+
+                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
+                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
+                        st.session_state.clicked_location = None # 👈 force close the clicked_location button
                     
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
@@ -344,6 +378,189 @@ def ShowTimerInfo():
 
                 
                 st.markdown('---')
+
+    # ---- Bottom Section: Show History data for clicked_location ----
+    with st.container():
+        col1, col2, col3 = st.columns([1,30,1])
+
+        with col2:
+            def clear_selection_clicked_location():
+                st.session_state.clicked_location_History = None
+
+            if st.session_state.clicked_location_History:
+                st.markdown('---')
+                st.button("❌ Close",key = f'close_{st.session_state.clicked_location_History}' , on_click=clear_selection_clicked_location)
+                st.markdown("### 📋 History Tool Change")
+                st.info(f"Showing history data for: `{st.session_state.clicked_location_History}`")
+                
+                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
+                df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location_History]
+                df = df[cols].reset_index(drop=True)
+                
+                ColOptionTurret, ColOptionStation, ColStartDatePicker, ColEndDatePicker,ColSearchButton = st.columns([1,1,1,1,1])
+                OptionTurret= ''
+                OptionStation = ''
+                StartDate = None
+                EndDate = None
+                with ColOptionTurret:
+                    OptionTurret = st.selectbox("Turret Position",
+                            options=df['Turret'].unique(),
+                            index=None,
+                            placeholder="Select Turret Position...",
+                        )
+                with ColOptionStation:
+                    if OptionTurret:
+                        # Filter tools based on selected turret
+                        filtered_tools = df[df['Turret'] == OptionTurret]['Tool'].unique()
+                        OptionStation = st.selectbox(
+                            "Station",
+                            options=filtered_tools,
+                            index=None,
+                            placeholder="Select Station...",
+                            key="station"
+                        )
+                    else:
+                        st.selectbox(
+                            "Station",
+                            options=[''],
+                            index=None,
+                            placeholder="Select Turret first...",
+                            disabled=True,
+                            key="station_disabled"
+                        )
+
+                    
+                with ColStartDatePicker:
+                    StartDate = st.date_input("Start Date", value=None, min_value=None, max_value=date.today(), key="start_date")
+                    
+                with ColEndDatePicker:
+                    EndDate = st.date_input("End Date", value=None, min_value=None, max_value=date.today(), key="end_date")
+                
+                with ColSearchButton:
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
+                    if st.button("Search", use_container_width=True):
+                        #all selection need to be made else show error
+                        if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                            st.error("Please select Turret, Station and Date Range to search.")
+                            st.session_state.clicked_search_History = None
+                        # Check if Start Date is before or equal to End Date
+                        elif StartDate > EndDate:
+                            st.error("Start Date must be earlier than or equal to End Date.")
+                            st.session_state.clicked_search_History = None
+                        else:
+                            st.session_state.clicked_search_History = st.session_state.clicked_machineID_History
+
+
+                if st.session_state.clicked_search_History:
+                    if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                        st.session_state.clicked_search_History = None
+                        return
+                    # Check if Start Date is before or equal to End Date
+                    elif StartDate > EndDate:
+                        st.error("Start Date must be earlier than or equal to End Date.")
+                        return
+                    
+                    df_history = get_History_Tool_Data(
+                        MachineName=st.session_state.clicked_search_History,
+                        Position=OptionTurret, 
+                        ToolingStation=OptionStation,  
+                        StartDate=StartDate,  
+                        EndDate=EndDate
+                    )
+                    cols = ['Turret','Tool','Process','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter','CompletedDate','LoadX_Alm', 'LoadZ_Alm']
+                    df_history = df_history[cols].reset_index(drop=True)
+                
+                    # Header row
+                    header_cols = st.columns([1, 2, 1,1,1,1,1])
+                    #header_titles = ['Tool ID', 'Process','Preset (pcs)','Actual (pcs)', 'Start Date','Completed Date','LoadX', 'LoadZ']
+                    header_titles = ['Tool ID', 'Process','Actual (pcs)', 'Start Date','Completed Date','LoadX', 'LoadZ']
+                    for col, title in zip(header_cols, header_titles):
+                        col.markdown(f"**{title}**")
+                    
+                    def clear_Selected_Graph(i):
+                        st.session_state[f'visible_history_graph_row_{i}']= None
+
+                    # Render table with buttons
+                    for i, row in df_history.iterrows():
+
+                        if f'visible_history_graph_row_{i}' not in st.session_state:
+                            st.session_state[f'visible_history_graph_row_{i}'] = None
+
+                        cols = st.columns([1, 2, 1,1,1,1,1])  # Adjust column widths
+                        cols[0].write(str(row['ToolNoID']))
+                        cols[1].write(row['Process'])
+                        #cols[2].write(str(row['PresetCounter']))
+                        cols[2].write(str(row['TotalCounter']))
+                        cols[3].write(str(row['StartDate']))
+                        cols[4].write(str(row['CompletedDate']))
+
+
+                        if cols[5].button("LoadX", key=f"btn_LoadX_{i}"):
+                            if st.session_state[f'visible_history_graph_row_{i}'] == "LoadX":
+                                st.session_state[f'visible_history_graph_row_{i}'] = None # Hide if already visible
+                            else:
+                                st.session_state[f'visible_history_graph_row_{i}'] = "LoadX"
+
+                        if cols[6].button("LoadZ", key=f"btn_LoadZ_{i}"):
+                            if st.session_state[f'visible_history_graph_row_{i}'] == "LoadZ":
+                                st.session_state[f'visible_history_graph_row_{i}'] = None # Hide if already visible
+                            else:
+                                st.session_state[f'visible_history_graph_row_{i}'] = "LoadZ"
+
+                        if st.session_state[f'visible_history_graph_row_{i}'] == "LoadX":
+                            loadXDf = get_Current_Tool_Column_Data(
+                                MachineName=row['MachineID'],
+                                Position=row['Turret'],
+                                ToolingStation=row['Tool'],
+                                StartDate=row['StartDate'],
+                                AlarmColumn='Load_X',
+                                AlarmFilter=row['LoadX_Alm'],
+                                historyFlag=True,
+                                EndDate=row['CompletedDate'],
+                            )
+                            st.button("❌ Close",key = f'close_loadX{i}' , on_click=clear_Selected_Graph, args=(i,))
+                            if loadXDf.empty:
+                                st.error(f"No data available for Tool {row['Tool']} (Load_X).")
+                            else:
+                                fig = plot_selected_columns_by_pieces_made(
+                                    loadXDf,
+                                    selectedColumn='Load_X',
+                                    TotalCounter=row['TotalCounter'],
+                                    PresetCounter=row['PresetCounter']
+                                )
+
+                                #st.pyplot(fig)
+                                st.plotly_chart(fig)
+                            
+
+                        elif st.session_state[f'visible_history_graph_row_{i}'] == "LoadZ":
+                            loadZDf = get_Current_Tool_Column_Data(
+                                MachineName=row['MachineID'],
+                                Position=row['Turret'],
+                                ToolingStation=row['Tool'],
+                                StartDate=row['StartDate'],
+                                AlarmColumn='Load_Z',
+                                AlarmFilter=row['LoadZ_Alm'],
+                                historyFlag=True,
+                                EndDate=row['CompletedDate'],
+                            )
+                            st.button("❌ Close",key = f'close_loadZ{i}' , on_click=clear_Selected_Graph, args=(i,))
+                            if loadZDf.empty:
+                                st.error(f"No data available for Tool {row['Tool']} (Load_Z).")
+                            else:
+                            
+                                fig = plot_selected_columns_by_pieces_made(
+                                    loadZDf,
+                                    selectedColumn='Load_Z',
+                                    TotalCounter=row['TotalCounter'],
+                                    PresetCounter=row['PresetCounter']
+                                )
+
+                                #st.pyplot(fig)
+                                st.plotly_chart(fig)
+                st.markdown('---')
+
+
 
 def GetTowerLightUI(color):
     colorUI = f"""

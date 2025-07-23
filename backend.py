@@ -269,7 +269,7 @@ def load_data_all():
         DECLARE @Plant INT=2100
         ------------------------------------------- ToolCounter ------------------------------------
         SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, TL.IsActiveTool,
-        TL.StartDate, GetDate() CompletedDate,TN.ToolPieces,
+        DATEADD(HOUR, 8, TL.StartDate) AS StartDate, GetDate() CompletedDate,TN.ToolPieces,
         mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
         ISNULL(mmTool.PresetCounter,0)PresetCounter,
         mmTool.LoadX_Alm,mmTool.LoadZ_Alm
@@ -575,6 +575,36 @@ def get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate):
     df = pd.read_sql(query, conn,params=params)
     return df
 
+def get_OT_Datalake_data_history(MachineName, Position, ToolingStation,StartDate,EndDate):
+    conn = get_OT_DataLake_db_connection()
+    query = """
+            SELECT *
+                FROM (
+                    SELECT *,? ToolingStation,
+                    ROW_NUMBER() OVER (
+                    PARTITION BY Value ORDER BY TIMESTAMP DESC
+                    ) AS Duplicate
+                    FROM [OT_DataLake].[dbo].[OT_MS]
+                    WHERE NAME LIKE ?
+                    AND NAME LIKE '%_bal%'
+                    AND [TIMESTAMP] > ?
+                    AND [TIMESTAMP] <= ?
+            ) D
+            WHERE Duplicate = 1
+            ORDER BY [TIMESTAMP] DESC
+            """
+
+
+    QueryMachineName = f"%{MachineName}%TOOL_%{'L' if Position.upper() == 'LEFT' else 'R'}_T{str(ToolingStation)}%".replace("-","_")
+
+    StartDate = StartDate.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+    EndDate = EndDate.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+    params = (ToolingStation,QueryMachineName, StartDate, EndDate)
+    cursor = conn.cursor()
+    df = pd.read_sql(query, conn,params=params)
+    return df
+
+
 def get_questdb_data(Position,StartDate, ToolingStation):
     engine = get_Questdb_connection()
     QuestDbQuery="""
@@ -588,9 +618,32 @@ def get_questdb_data(Position,StartDate, ToolingStation):
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
 
-def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn,AlarmFilter):
-    OT_DataLake_df = get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate)
-    Questdb_df = get_questdb_data(Position,StartDate, ToolingStation)
+def get_questdb_data_history(Position,StartDate,EndDate, ToolingStation):
+    engine = get_Questdb_connection()
+    QuestDbQuery="""
+        SELECT * 
+        FROM MuratecStsLog"""+Position+"""
+        WHERE timestamp > :StartDate 
+        and timestamp < :EndDate
+        and ToolNo = :ToolingStation"""
+    StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    EndDate = EndDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    params = {"StartDate": StartDate, "EndDate": EndDate, "ToolingStation": int(str(ToolingStation)[0])}
+    with engine.connect() as conn:
+        df = pd.read_sql(text(QuestDbQuery), conn, params=params)
+    return df
+
+def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn,AlarmFilter,historyFlag=False,EndDate=None):
+    if historyFlag:
+        if EndDate is None:
+            raise ValueError("EndDate must be provided when historyFlag is True")
+        OT_DataLake_df = get_OT_Datalake_data_history(MachineName, Position, ToolingStation,StartDate,EndDate)
+    else:
+        OT_DataLake_df = get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate)
+    if historyFlag:
+        Questdb_df = get_questdb_data_history(Position,StartDate, EndDate,ToolingStation)
+    else:
+        Questdb_df = get_questdb_data(Position,StartDate, ToolingStation)
     if OT_DataLake_df.empty and Questdb_df.empty:
         return pd.DataFrame()
 
@@ -645,3 +698,99 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
     #CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[selectedColumn]<=CutOffValue]
 
     return CurrentToolCountNQuestdbdf
+
+def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDate):
+    if not DEMO_MODE:
+        conn = get_db_connection()
+        query = f'''
+        SET NOCOUNT ON
+        SET ANSI_WARNINGS OFF
+        ;
+
+        DECLARE @Plant INT=2100
+        DECLARE @sDate DateTime, @eDate DateTime
+        DECLARE @MacID AS NVARCHAR(18)
+        DECLARE @MainCategory AS NVARCHAR(10)
+        DECLARE @ToolStation AS INT
+
+        SET @sDate='{StartDate}'
+        SET @eDate='{EndDate}'
+
+        SET @MacID='{MachineName}'
+        SET @MainCategory='{Position}'
+        SET @ToolStation={ToolingStation}
+        ------------------------------------------- ToolCounter ------------------------------------
+        SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter,
+        DATEADD(HOUR, 8, TL.StartDate) AS StartDate, DATEADD(HOUR, 8, TL.CompletedDate) AS CompletedDate,TN.ToolPieces,
+        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
+        ISNULL(mmTool.PresetCounter,0)PresetCounter,
+        mmTool.LoadX_Alm,mmTool.LoadZ_Alm
+        INTO #ToolLife FROM ToolLifeHistory TL
+        INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
+        ON TL.ToolNoId=TN.Id
+        WHERE TN.MachineID LIKE 'MS%'
+        AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
+        AND TN.MachineId=@MacID
+        AND mmTool.ToolingMainCategory=@MainCategory
+        AND mmTool.ToolingStation=@ToolStation
+        AND DATEADD(HOUR, 8, TL.StartDate) BETWEEN @sDate AND @eDate
+        ORDER BY MACHINEID,SAPCode DESC
+
+        --SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
+        --TL.StartDate, TL.CompletedDate,TN.ToolPieces,
+        --mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
+        --ISNULL(mmTool.PresetCounter,0)PresetCounter
+        --INTO #ToolLifeHist FROM ToolLifeHistory TL
+        --INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
+        --ON TL.ToolNoId=TN.Id
+        --WHERE TL.ToolNoId IN (SELECT ToolNoID FROM #ToolLife)
+        --ORDER BY MACHINEID,SAPCode DESC
+
+        --INSERT INTO #ToolLife SELECT * FROM #ToolLifeHist
+        -- drop table #ToolLife,#ToolLifeHist
+
+        ------------------------------------------- Material & Machine Information ------------------------------------
+        SELECT Plant, MachineID, Dept, MaterialCode, MaterialDescription, MesCT
+        INTO #Session  FROM [SPLOEE].[dbo].[Session]
+        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
+        AND SessionStatus='RUNNING' AND Plant=@Plant
+
+        SELECT Plant,Dept,MachineID,MachineNo Location
+        INTO #WCMachineID FROM [MDM].[dbo].[WorkCenterMachineID]
+        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
+        AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
+
+        ------------------------------------------- ToolLifeDetails In Group ------------------------------------
+        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,StartDate,CompletedDate,
+        SUM(TotalCounter) TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm
+        INTO #TL FROM #ToolLife
+        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,StartDate,CompletedDate,PresetCounter,LoadX_Alm,LoadZ_Alm
+        ORDER BY MachineID,ToolingMainCategory,ToolingStation
+
+        SELECT #TL.*, 
+        #Session.MesCT,#Session.MaterialCode,#Session.MaterialDescription,
+        #WCMachineID.Location
+        INTO #ToolInfo FROM #TL
+        LEFT OUTER JOIN #Session ON #TL.MachineID=#Session.MachineID
+        LEFT OUTER JOIN #WCMachineID ON #TL.MachineID=#WCMachineID.MachineID
+
+        SELECT
+        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm, CompletedDate 
+        FROM #ToolInfo
+        ORDER BY ToolNoID Desc 
+
+        DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo
+        '''
+        df = pd.read_sql(query, conn)
+        conn.close()
+        
+    else:
+        data_demo = {'Location': ['FMC9','FMC9','FMC9'],
+                    'Turret': ['RIGHT','RIGHT','RIGHT'],
+                    'Tool': ['202','101','505'],
+                    'Process': ['OP10 OD FINISH','OP10 OD ROUGH','OP10 ID FINISH'],
+                    'Balance (mins)': ['12','12','13'],
+                    'Balance (pcs)': ['15','15','17']}
+        df = pd.DataFrame(data_demo)
+
+    return df
