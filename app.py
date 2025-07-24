@@ -122,7 +122,7 @@ def ShowTimerInfo():
         with col2:
             # Header row
             header_cols = st.columns([3, 2, 1, 1,1])
-            header_titles = ['Machine Condition', 'Count Down', 'Tool Detail', 'Inspection Detail','History']
+            header_titles = ['Machine Condition', 'Count Down', 'Inspection Detail', 'Tool Detail', 'History']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
                     f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",
@@ -132,7 +132,7 @@ def ShowTimerInfo():
 
             for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
-                col_name, col_timer, col_tool, col_button, col_history = st.columns([3, 2, 1, 1,1])  # adjust ratios as needed
+                col_name, col_timer, col_button, col_tool, col_history = st.columns([3, 2, 1, 1,1])  # adjust ratios as needed
 
                 with col_name:
                     backGroundColor = (
@@ -167,23 +167,6 @@ def ShowTimerInfo():
                         unsafe_allow_html=True,
                     )
 
-                with col_tool:
-                    st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
-
-                    # Store selected location for showing details at bottom section
-                    if st.button("Show 🛠️", key=f"btn_{row['Location']}", use_container_width=True):
-                        # #toggle off
-                        # if st.session_state.clicked_location == row['Location']:
-                        #     st.session_state.clicked_location = None # clear session state
-                        # #toggle on
-                        # else:
-                        st.session_state.clicked_location = row['Location'] # update session state
-
-                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
-                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
-                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
-                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
-
                 with col_button:
                     # Store selected materialcode for plotting at bottom section
                     LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"]
@@ -213,6 +196,23 @@ def ShowTimerInfo():
                             st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                             st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                             st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                            
+                with col_tool:
+                    st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
+
+                    # Store selected location for showing details at bottom section
+                    if st.button("Show 🛠️", key=f"btn_{row['Location']}", use_container_width=True):
+                        # #toggle off
+                        # if st.session_state.clicked_location == row['Location']:
+                        #     st.session_state.clicked_location = None # clear session state
+                        # #toggle on
+                        # else:
+                        st.session_state.clicked_location = row['Location'] # update session state
+
+                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
+                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
+                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
 
                 with col_history:
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer

@@ -777,6 +777,7 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         SELECT
         Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm, CompletedDate 
         FROM #ToolInfo
+        Where TotalCounter > 0
         ORDER BY ToolNoID Desc 
 
         DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo
