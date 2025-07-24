@@ -5,7 +5,7 @@ import pandas as pd
 
 # import local module
 from config_loader import load_config
-from streamlit_extras.stylable_container import stylable_container 
+from streamlit_extras.stylable_container import stylable_container
 config = load_config()
 
 from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data
