@@ -2,6 +2,8 @@ import streamlit as st
 from datetime import datetime,timedelta,date
 import time
 import pandas as pd
+import base64
+
 
 # import local module
 from config_loader import load_config
@@ -98,6 +100,10 @@ if 'clicked_search_History' not in st.session_state:
 
 # ---- Information Display ----
 
+# Read the image file and encode it to base64
+with open("plandwt.png", "rb") as image_file:
+    encoded_string = base64.b64encode(image_file.read()).decode()
+
 @st.fragment(run_every=str(PAGE_REFRESH)+"s")
 def ShowTimerInfo():
     df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
@@ -145,10 +151,25 @@ def ShowTimerInfo():
                     colorUI = GetTowerLightUI(backGroundColor)
 
                     if row['TechRequired']:
-                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} mins</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        st.markdown(f"""
+                                <div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'>
+                                    <strong>
+                                        {row['Location']} 
+                                        <span>
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
+                                            {row['TechRequestMin']} mins
+                                        </span>
+                                    </strong>{colorUI}</div>""", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} mins</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
+                                <div class='circle-container' style='font-size: 50px;'>
+                                    <strong>
+                                        {row['Location']} 
+                                        <span style='color: gray; opacity: 0.2;'>
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']} mins
+                                        </span>
+                                    </strong>{colorUI}</div>""", unsafe_allow_html=True)                             
+
 
                 with col_timer:
                     backGroundColor, blink_style = set_timer_style(row['DurationMins'])
@@ -564,22 +585,22 @@ def ShowTimerInfo():
 
 def GetTowerLightUI(color):
     colorUI = f"""
-                        <style>
-                            .circle-container {{
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: space-around;
-                                    height: 100px; /* Adjust height as needed */
-                            }}
-                            .circle-button {{
-                                    height: 40px;
-                                    width: 40px;
-                                    border-radius: 50%;
-                                    border: 1px solid #000;
-                                    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
-                            }}
-                        </style>
-                        <span class="circle-button" style=" background: {color};"></span>
+                            <style>
+                                .circle-container {{
+                                        display: flex;
+                                        align-items: center;
+                                        justify-content: space-around;
+                                        height: 100px; /* Adjust height as needed */
+                                }}
+                                .circle-button {{
+                                        height: 40px;
+                                        width: 40px;
+                                        border-radius: 50%;
+                                        border: 1px solid #000;
+                                        box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
+                                }}
+                            </style>
+                            <span class="circle-button" style=" background: {color};"></span>
                         """
     return colorUI
 
@@ -624,9 +645,8 @@ with st.container():
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
 
-            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.15rem;'>{RedColorUI} Alarm/Stop |{YellowColorUI} Waiting |{GreenColorUI} Running |{GreyColorUI} Machine Off | <span style='font-size: 40px;'>🧑‍🏭</span> Technician Call </div>",
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.15rem;'>{RedColorUI} Alarm/Stop |{YellowColorUI} Waiting |{GreenColorUI} Running |{GreyColorUI} Machine Off |  <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> Technician Call </div>",
                     unsafe_allow_html=True)
-
                 
             st.markdown('---')
 
