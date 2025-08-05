@@ -605,30 +605,32 @@ def get_OT_Datalake_data_history(MachineName, Position, ToolingStation,StartDate
     return df
 
 
-def get_questdb_data(Position,StartDate, ToolingStation):
+def get_questdb_data(Position,StartDate, ToolingStation, MacID):
     engine = get_Questdb_connection()
     QuestDbQuery="""
         SELECT * 
         FROM MuratecStsLog"""+Position+"""_Real_Time
         WHERE timestamp > :StartDate 
-        and ToolNo = :ToolingStation"""
+        and ToolNo = :ToolingStation
+        and MacID = :MacID"""
     StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    params = {"StartDate": StartDate, "ToolingStation": int(str(ToolingStation)[0])}
+    params = {"StartDate": StartDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID}
     with engine.connect() as conn:
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
 
-def get_questdb_data_history(Position,StartDate,EndDate, ToolingStation):
+def get_questdb_data_history(Position,StartDate,EndDate, ToolingStation, MacID):
     engine = get_Questdb_connection()
     QuestDbQuery="""
         SELECT * 
         FROM MuratecStsLog"""+Position+"""
         WHERE timestamp > :StartDate 
         and timestamp < :EndDate
-        and ToolNo = :ToolingStation"""
+        and ToolNo = :ToolingStation
+        and MacID = :MacID"""
     StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
     EndDate = EndDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    params = {"StartDate": StartDate, "EndDate": EndDate, "ToolingStation": int(str(ToolingStation)[0])}
+    params = {"StartDate": StartDate, "EndDate": EndDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID}
     with engine.connect() as conn:
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
@@ -641,9 +643,9 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
     else:
         OT_DataLake_df = get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate)
     if historyFlag:
-        Questdb_df = get_questdb_data_history(Position,StartDate, EndDate,ToolingStation)
+        Questdb_df = get_questdb_data_history(Position,StartDate, EndDate,ToolingStation, MachineName)
     else:
-        Questdb_df = get_questdb_data(Position,StartDate, ToolingStation)
+        Questdb_df = get_questdb_data(Position,StartDate, ToolingStation, MachineName)
     if OT_DataLake_df.empty and Questdb_df.empty:
         return pd.DataFrame()
 
@@ -657,7 +659,7 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
     CurrentToolCountNQuestdbdf =pd.merge_asof(Questdb_df.sort_values('Timestamp'), OT_DataLake_df.sort_values('TIMESTAMP'), left_on='Timestamp', right_on='TIMESTAMP', direction='backward')
     CurrentToolCountNQuestdbdf['Timestamp'] = pd.to_datetime(CurrentToolCountNQuestdbdf['Timestamp'], format='%d/%m/%Y %H:%M:%S.%f')
 
-    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna()
+    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna(subset=['Duplicate'])
 
     CurrentToolCountNQuestdbdf['VALUE'] =  CurrentToolCountNQuestdbdf['VALUE'].astype(int)
     
@@ -777,6 +779,7 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         SELECT
         Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm, CompletedDate 
         FROM #ToolInfo
+        Where TotalCounter > 0
         ORDER BY ToolNoID Desc 
 
         DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo
