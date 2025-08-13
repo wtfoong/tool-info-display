@@ -10,8 +10,8 @@ from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data
-from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data
+from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph
 
 # ---- Load app setting from config ----
 
@@ -45,6 +45,13 @@ def get_CTQ_SpecNo_cached(sapcode):
 def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter,historyFlag=False, EndDate=None):
     df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter,historyFlag=historyFlag, EndDate=EndDate)
     return df_Tool_Data
+
+@st.cache_data(ttl= DEFAULT_CACHE_LIFE)
+def get_KPI_Data_Cache(MachineName):
+
+    df_KPI_Data = get_KPI_Data(MachineName)
+
+    return df_KPI_Data
 
 
 def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDate):
@@ -97,6 +104,9 @@ if 'clicked_machineID_History' not in st.session_state:
 
 if 'clicked_search_History' not in st.session_state:
     st.session_state.clicked_search_History = None
+    
+if 'clicked_KPI' not in st.session_state:
+    st.session_state.clicked_KPI = None
 
 # ---- Information Display ----
 
@@ -127,8 +137,8 @@ def ShowTimerInfo():
         
         with col2:
             # Header row
-            header_cols = st.columns([3, 2, 1, 1,1])
-            header_titles = ['Machine Condition', 'Count Down', 'Inspection Detail', 'Tool Detail', 'History']
+            header_cols = st.columns([3, 2, 1, 1,1,1])
+            header_titles = ['Machine Condition', 'Count Down', 'Inspection Detail', 'Tool Detail', 'History','KPI']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
                     f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",
@@ -138,7 +148,7 @@ def ShowTimerInfo():
 
             for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
-                col_name, col_timer, col_button, col_tool, col_history = st.columns([3, 2, 1, 1,1])  # adjust ratios as needed
+                col_name, col_timer, col_button, col_tool, col_history, col_kpi = st.columns([3, 2, 1, 1,1,1])  # adjust ratios as needed
 
                 with col_name:
                     backGroundColor = (
@@ -217,6 +227,7 @@ def ShowTimerInfo():
                             st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                             st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                             st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                            st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
                             
                 with col_tool:
                     st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
@@ -234,6 +245,7 @@ def ShowTimerInfo():
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
                         st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                         st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                        st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
 
                 with col_history:
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
@@ -250,7 +262,24 @@ def ShowTimerInfo():
                         st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
                         st.session_state.clicked_location = None # 👈 force close the clicked_location button
+                        st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+            
+                with col_kpi:
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
+                    if st.button("KPI 🛠️", key=f"btn_{row['Location']}_KPI", use_container_width=True):
+                        st.session_state.clicked_KPI = row['MachineID'] # update session state
+
+                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
+                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
+                        st.session_state.clicked_location = None # 👈 force close the clicked_location button
+                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                     
+                    
+                    
+                    
+                    
+                            
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
         col1, col2, col3 = st.columns([1,30,1])
@@ -400,7 +429,7 @@ def ShowTimerInfo():
                 
                 st.markdown('---')
 
-    # ---- Bottom Section: Show History data for clicked_location ----
+    # ---- Bottom Section: Show History data for clicked_History ----
     with st.container():
         col1, col2, col3 = st.columns([1,30,1])
 
@@ -581,6 +610,49 @@ def ShowTimerInfo():
                                 st.plotly_chart(fig)
                 st.markdown('---')
 
+    # ---- Bottom Section: Show KPI data for clicked_KPI ----
+    with st.container():
+        col1, col2, col3 = st.columns([1,30,1])
+
+        with col2:
+            def clear_selection_clicked_location():
+                st.session_state.clicked_KPI = None
+
+            if st.session_state.clicked_KPI:
+                st.markdown('---')
+                st.button("❌ Close",key = f'close_{st.session_state.clicked_KPI}' , on_click=clear_selection_clicked_location)
+                st.markdown("### 📋 KPI")
+                st.info(f"Showing KPI data for: `{st.session_state.clicked_KPI}`")
+
+                
+                KPIDf = get_KPI_Data_Cache(
+                    MachineName=st.session_state.clicked_KPI
+                )
+
+                if KPIDf.empty:
+                    st.error(f"No data available for machine {st.session_state.clicked_KPI}")
+                else:
+                    
+                    df_low = KPIDf[KPIDf['AvgCnt'] < 1000]
+                    df_mid = KPIDf[(KPIDf['AvgCnt'] >= 1000) & (KPIDf['AvgCnt'] < 3000)]
+                    df_high = KPIDf[KPIDf['AvgCnt'] >= 3000]
+
+                    fig_low = plot_KPI_Graph(
+                        df_low,
+                        st.session_state.clicked_KPI,
+                    )
+                    fig_medium = plot_KPI_Graph(
+                        df_mid,
+                        st.session_state.clicked_KPI,
+                    )
+                    fig_high = plot_KPI_Graph(
+                        df_high,
+                        st.session_state.clicked_KPI,
+                    )
+                    st.plotly_chart(fig_low)
+                    st.plotly_chart(fig_medium)
+                    st.plotly_chart(fig_high)
+                st.markdown('---')
 
 
 def GetTowerLightUI(color):

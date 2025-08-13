@@ -359,4 +359,122 @@ def plot_RPMGraph(df,start_date):
     
     return fig
     
+
+def insert_data_into_csv(df, filename):
+    """
+    Insert data into a CSV file.
+    If the file exists, append the data; otherwise, create a new file.
+    """
+    try:
+        df.to_csv(filename, mode='a', header=not pd.io.common.file_exists(filename), index=False)
+        print(f"Data successfully inserted into {filename}")
+    except Exception as e:
+        print(f"Error inserting data into {filename}: {e}")
+        
+def read_csv_data(filename):
+    """
+    Read data from a CSV file.
+    If the file does not exist, return an empty DataFrame.
+    """
+    try:
+        df = pd.read_csv(filename)
+        print(f"Data successfully read from {filename}")
+        return df
+    except FileNotFoundError:
+        print(f"{filename} not found. Returning empty DataFrame.")
+        return pd.DataFrame()
+    except Exception as e:
+        print(f"Error reading data from {filename}: {e}")
+        return pd.DataFrame()  
     
+    
+def plot_KPI_Graph(df, machineName):
+    fig = go.Figure()
+    df = df[['Year', 'Month', 'AvgCnt', 'ToolingStation', 'ToolingMainCategory']].copy()
+
+    # Create a 'Year-Month' column
+    df['YearMonth'] = df['Year'].astype(str) + '-' + df['Month'].astype(str).str.zfill(2)
+
+    # Create a unique identifier for each tool and side
+    df['ToolSide'] = df['ToolingStation'].astype(str) + '_' + df['ToolingMainCategory']
+
+    # Pivot the data for plotting
+    pivot_df = df.pivot_table(index='ToolSide', columns='YearMonth', values='AvgCnt')
+    
+
+    # First non-null value per ToolSide (earliest valid month)
+    baseline = pivot_df.bfill(axis=1).iloc[:, 0]
+
+    # Avoid divide-by-zero (treat 0 baseline as NaN so % becomes NaN instead of inf)
+    safe_baseline = baseline.replace(0, np.nan)
+
+    # % change vs first value
+    pct_df = (pivot_df.divide(safe_baseline, axis=0) - 1) * 100
+
+
+    # Bar width and offset setup
+    bar_width = 0.15
+    tool_sides = list(pivot_df.index)
+    year_months = list(pivot_df.columns)
+
+    # Create a mapping from ToolSide to numeric x positions
+    tool_side_positions = {tool: i for i, tool in enumerate(tool_sides)}
+
+
+    # Add traces for each column
+    for i, year_month in enumerate(pivot_df.columns):
+        text_vals = pct_df[year_month].round(1)
+        text_vals = text_vals.where(text_vals.notna(), '')
+
+
+        fig.add_trace(go.Bar(
+            x=tool_sides,
+            y=pivot_df[year_month],
+            name=year_month,
+            text=text_vals,
+            texttemplate='%{y:,.0f} (%{text:+.1f}%)',
+            textfont=dict(size=15, color='white'),
+            textposition='outside',
+            hovertemplate=(
+                f"ToolSide=%{{x}}<br>"
+                f"{year_month} AvgCnt=%{{y}}<br>"
+                "Δ vs prev: %{text}"
+                "<extra></extra>"
+            ),
+            width=bar_width,
+            offset=i * bar_width - (bar_width * len(year_months) / 2)
+        ))
+
+        # Add annotations below each bar
+        for tool in tool_sides:
+            x_pos = tool_side_positions[tool] + (i * bar_width - (bar_width * len(year_months) / 2))
+            fig.add_annotation(
+                x=x_pos,
+                y=-10,  # Adjust based on your y-axis range
+                text=year_month,
+                showarrow=False,
+                font=dict(size=15, color='white'),
+                textangle=-45,
+                xanchor='center',
+                yanchor='top'
+            )
+
+    # Update layout
+    fig.update_layout(
+        title=dict(text=f"KPI Graph for {machineName}", 
+        x=0.5,  # Center the title
+        xanchor='center',
+        font=dict(size=16, color='white')
+        ),
+        xaxis_title='Tooling Station',
+        yaxis_title='Values',
+        plot_bgcolor='black',
+        paper_bgcolor='black',
+        font=dict(color='white'),
+        legend=dict(font=dict(color='white'))
+    )
+    
+    # Ensure text above bars isn't clipped by the plotting area
+    fig.update_traces(cliponaxis=False)
+
+    return fig
