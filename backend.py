@@ -797,3 +797,32 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         df = pd.DataFrame(data_demo)
 
     return df
+
+def get_KPI_Data(MachineName):
+
+    if not DEMO_MODE:
+        query = f'''
+        SELECT mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.Year,TN.Month,
+        SUM(TL.TotalCounter) TotalCounter, SUM(TL.TotalCounter)/COUNT(DISTINCT ToolNoID) AvgCnt,mmTool.PresetCounter,
+        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode
+        FROM ToolLifeHistory TL
+        inner JOIN (ToolNo TN inner JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
+        ON TL.ToolNoId=TN.Id
+        LEFT JOIN SPLOEE.DBO.OEEDownTime DT ON TL.OEEOutputKepID = DT.ID
+        WHERE TN.MachineId = ? --AND TL.CreatedBy='OPCROUTER'
+        AND TL.CreatedDate >= '2025-05-25 00:00:00.000' 
+        -- AND ToolingMainCategory='LEFT' AND ToolingStation=303
+        AND TL.CreatedDate NOT BETWEEN '2025/06/01' and '2025/06/02'
+        AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
+        AND TL.ToolNoId NOT IN  (5649,5671,5652,5651) -- Testing Data 
+        AND TL.TotalCounter > mmTool.PresetCounter * 0.2
+        GROUP BY mmTool.ToolID,mmTool.ToolingMaker,TN.MachineId,TN.Year,TN.Month,mmTool.PresetCounter,
+        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode
+        ORDER BY mmTool.ToolingMainCategory,mmTool.ToolingStation,TN.Month
+        '''
+        params = (MachineName)
+        conn = get_db_connection()
+        df = pd.read_sql(query, conn,params=params)
+        conn.close()
+
+        return df
