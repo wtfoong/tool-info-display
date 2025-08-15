@@ -315,7 +315,7 @@ def ShowTimerInfo():
 
                     cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1])  # Adjust column widths
                     cols[0].write(row['Turret'])
-                    cols[1].write(str(row['Tool']))
+                    cols[1].write(str(row['Tool'])+" ("+str(row['ToolNoID'])+")")
                     cols[2].write(row['Process'])
                     cols[3].write(str(row['PresetCounter']))
                     cols[4].write(str(row['TotalCounter']))
