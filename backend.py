@@ -77,7 +77,7 @@ def load_data(limit: int = 1000):
         DECLARE @Plant INT=2100
         ------------------------------------------- ToolCounter ------------------------------------
         SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, TL.IsActiveTool,
-        TL.StartDate, GetDate() CompletedDate,TN.ToolPieces,
+        DATEADD(HOUR, 8, TL.StartDate) AS StartDate, GetDate() CompletedDate,TN.ToolPieces,
         mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
         ISNULL(mmTool.PresetCounter,0)PresetCounter,
         mmTool.LoadX_Alm,mmTool.LoadZ_Alm
@@ -160,13 +160,17 @@ def load_data(limit: int = 1000):
         MacLEDGreen BIT,
         MacLEDYellow BIT,
         MacLEDRed BIT,
-        MacStatus INT
+        MacStatus INT,
+        LoadPeak_Alm_L BIT,
+        LoadPeak_Warn_L BIT,
+        LoadPeak_Alm_R BIT,
+        LoadPeak_Warn_R BIT,
         )
 
         WHILE @RowNum <= @TotalRow
         BEGIN
             INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0 
+                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0 
             FROM #ToolInfo
             WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
@@ -218,15 +222,23 @@ def load_data(limit: int = 1000):
         WHERE MacInfo.InMacID IN (SELECT MachineID FROM #ToolSummary)
         -- WHERE MacInfo.InMacID IN ('MSNLTH09-29','MSNLTH13-11')
         GROUP BY MacInfo.InMacID)
-        SELECT CTE1.*,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus INTO #MacInfo FROM CTE1
-        LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
+        SELECT CTE1.*,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
+        LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
+        INTO #MacInfo FROM CTE1
+        LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
+                          LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
+                   FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
         ON R1.InMacID = CTE1.InMacID and R1.ID = CTE1.MaxID;
 
         UPDATE #ToolSummary SET
         #ToolSummary.MacLEDGreen=ISNULL(#MacInfo.MacLEDGreen,0),
         #ToolSummary.MacLEDYellow=ISNULL(#MacInfo.MacLEDYellow,0),
         #ToolSummary.MacLEDRed=ISNULL(#MacInfo.MacLEDRed,0),
-        #ToolSummary.MacStatus=ISNULL(#MacInfo.MacStatus,0)
+        #ToolSummary.MacStatus=ISNULL(#MacInfo.MacStatus,0),
+        #ToolSummary.LoadPeak_Alm_L=ISNULL(#MacInfo.LoadPeak_Alm_L,0),
+        #ToolSummary.LoadPeak_Warn_L=ISNULL(#MacInfo.LoadPeak_Warn_L,0),
+        #ToolSummary.LoadPeak_Alm_R=ISNULL(#MacInfo.LoadPeak_Alm_R,0),
+        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
 
@@ -252,7 +264,11 @@ def load_data(limit: int = 1000):
                     'MacLEDGreen': [False,False],
                     'MacLEDYellow': [False,False],
                     'MacLEDRed': [False,True],
-                    'MacStatus': [0,0]}
+                    'MacStatus': [0,0],
+                    'LoadPeak_Alm_L':False,
+                    'LoadPeak_Warn_L':False,
+                    'LoadPeak_Alm_R':False,
+                    'LoadPeak_Warn_R':False}
         df = pd.DataFrame(data_demo)
 
     return df
@@ -352,13 +368,17 @@ def load_data_all():
         MacLEDGreen BIT,
         MacLEDYellow BIT,
         MacLEDRed BIT,
-        MacStatus INT
+        MacStatus INT,
+        LoadPeak_Alm_L BIT,
+        LoadPeak_Warn_L BIT,
+        LoadPeak_Alm_R BIT,
+        LoadPeak_Warn_R BIT,
         )
 
         WHILE @RowNum <= @TotalRow
         BEGIN
             INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0 
+                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0 
             FROM #ToolInfo
             WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
@@ -410,15 +430,23 @@ def load_data_all():
         WHERE MacInfo.InMacID IN (SELECT MachineID FROM #ToolSummary)
         -- WHERE MacInfo.InMacID IN ('MSNLTH09-29','MSNLTH13-11')
         GROUP BY MacInfo.InMacID)
-        SELECT CTE1.*,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus INTO #MacInfo FROM CTE1
-        LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
+        SELECT CTE1.*,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
+        LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
+        INTO #MacInfo FROM CTE1
+        LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
+                          LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
+                   FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
         ON R1.InMacID = CTE1.InMacID and R1.ID = CTE1.MaxID;
 
         UPDATE #ToolSummary SET
         #ToolSummary.MacLEDGreen=ISNULL(#MacInfo.MacLEDGreen,0),
         #ToolSummary.MacLEDYellow=ISNULL(#MacInfo.MacLEDYellow,0),
         #ToolSummary.MacLEDRed=ISNULL(#MacInfo.MacLEDRed,0),
-        #ToolSummary.MacStatus=ISNULL(#MacInfo.MacStatus,0)
+        #ToolSummary.MacStatus=ISNULL(#MacInfo.MacStatus,0),
+        #ToolSummary.LoadPeak_Alm_L=ISNULL(#MacInfo.LoadPeak_Alm_L,0),
+        #ToolSummary.LoadPeak_Warn_L=ISNULL(#MacInfo.LoadPeak_Warn_L,0),
+        #ToolSummary.LoadPeak_Alm_R=ISNULL(#MacInfo.LoadPeak_Alm_R,0),
+        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
 
@@ -609,10 +637,11 @@ def get_questdb_data(Position,StartDate, ToolingStation, MacID):
     engine = get_Questdb_connection()
     QuestDbQuery="""
         SELECT * 
-        FROM MuratecStsLog"""+Position+"""_Real_Time
-        WHERE timestamp > :StartDate 
-        and ToolNo = :ToolingStation
-        and MacID = :MacID"""
+            FROM MuratecStsLog
+            WHERE timestamp > :StartDate 
+            and ToolNo = :ToolingStation
+            and MacID = :MacID
+            and Run = 3"""
     StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
     params = {"StartDate": StartDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID}
     with engine.connect() as conn:

@@ -138,7 +138,7 @@ def ShowTimerInfo():
         with col2:
             # Header row
             header_cols = st.columns([3, 2, 1, 1,1,1])
-            header_titles = ['Machine Condition', 'Count Down', 'Inspection Detail', 'Tool Detail', 'History','KPI']
+            header_titles = ['Machine Condition', 'Count Down', 'Insp Detail', 'Tool Detail', 'History','KPI']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
                     f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",

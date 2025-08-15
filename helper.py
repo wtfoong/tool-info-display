@@ -323,7 +323,7 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
         legend_title='Legend',
         width=1200,
         height=400,
-        xaxis=dict(tickangle=45),
+        xaxis=dict(tickangle=-45),
         plot_bgcolor='black'
     )
     return fig
@@ -438,7 +438,7 @@ def plot_KPI_Graph(df, machineName):
             hovertemplate=(
                 f"ToolSide=%{{x}}<br>"
                 f"{year_month} AvgCnt=%{{y}}<br>"
-                "Δ vs prev: %{text}"
+                "Δ vs ori: %{text}"
                 "<extra></extra>"
             ),
             width=bar_width,
@@ -453,7 +453,7 @@ def plot_KPI_Graph(df, machineName):
                 y=-10,  # Adjust based on your y-axis range
                 text=year_month,
                 showarrow=False,
-                font=dict(size=15, color='white'),
+                font=dict(size=12, color='white'),
                 textangle=-45,
                 xanchor='center',
                 yanchor='top'
@@ -466,11 +466,17 @@ def plot_KPI_Graph(df, machineName):
         xanchor='center',
         font=dict(size=16, color='white')
         ),
-        xaxis_title='Tooling Station',
-        yaxis_title='Values',
+        xaxis=dict(
+                title=dict(
+                        text='Tooling Station',
+                        font=dict(size=20, color='white')  # Correct way to set font size and color
+                    ),
+                tickfont=dict(size=16, color='white')    # Font size for x-axis tick labels
+            ),
+        yaxis_title='Output (mean)',
         plot_bgcolor='black',
         paper_bgcolor='black',
-        font=dict(color='white'),
+        font=dict(color='white',size=20),
         legend=dict(font=dict(color='white'))
     )
     
