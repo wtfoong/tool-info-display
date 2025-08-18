@@ -199,11 +199,10 @@ def ShowTimerInfo():
                     )
 
                 with col_button:
-                    # Store selected materialcode for plotting at bottom section
-                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"]
-                    buttonType = "primary" if float(LowestPpk) < 0.7 else "secondary"
-                    backGroundColor = "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
-                    color = "white" if float(LowestPpk) < 0.7 else "black"
+                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"] if st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"] else "N/A"
+                    buttonType = "primary" if LowestPpk == "N/A" else "primary" if float(LowestPpk) < 0.7 else "secondary"
+                    backGroundColor = '#00FF00' if LowestPpk == "N/A" else "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
+                    color = "black" if LowestPpk == "N/A" else "white" if float(LowestPpk) < 0.7 else "black"
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
                     with stylable_container(
                         key=f"insp{row['Location']}_button",
@@ -215,6 +214,7 @@ def ShowTimerInfo():
                             }}
                             """,
                     ):
+                        # Store selected materialcode for plotting at bottom section
                         if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True,type=buttonType):
                             # #toggle off
                             # if st.session_state.clicked_materialcode == row['MaterialCode']:
