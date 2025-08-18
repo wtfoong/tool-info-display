@@ -230,10 +230,12 @@ def ShowTimerInfo():
                             st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
                             
                 with col_tool:
+                    buttonType = "primary" if row['LoadPeak_Alm_L'] or row['LoadPeak_Warn_L'] or row['LoadPeak_Alm_R'] or row['LoadPeak_Warn_R'] else 'secondary'
+
                     st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
 
                     # Store selected location for showing details at bottom section
-                    if st.button("Show 🛠️", key=f"btn_{row['Location']}", use_container_width=True):
+                    if st.button("Show 🛠️", key=f"btn_{row['Location']}", use_container_width=True,type=buttonType):
                         # #toggle off
                         # if st.session_state.clicked_location == row['Location']:
                         #     st.session_state.clicked_location = None # clear session state
