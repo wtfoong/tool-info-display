@@ -68,14 +68,41 @@ st.set_page_config(page_title=page_title, layout="wide")
 # html meta tags to refresh at browser level
 #st.markdown(f'<meta http-equiv="refresh" content="{PAGE_REFRESH}">',unsafe_allow_html=True)
 
+# Inject global CSS styles
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 3rem !important;
+        }
+        .circle-container {
+                display: flex;
+                align-items: center;
+                justify-content: space-around;
+                height: 100px; /* Adjust height as needed */
+        }
+        .circle-button {
+                height: 40px;
+                width: 40px;
+                border-radius: 50%;
+                border: 1px solid #000;
+                box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
+        }
+        .legendDiv{
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        .legendDiv span {
+            margin-left: 1rem;
+        }
+
+    </style>
+""", unsafe_allow_html=True)
+
 # header
 st.markdown(
     f"""
-    <style>
-        .block-container {{
-            padding-top: 3rem !important;
-        }}
-    </style>
     <h1 style='text-align: center;'>{page_title}</h1>
     """,
     unsafe_allow_html=True
@@ -659,21 +686,6 @@ def ShowTimerInfo():
 
 def GetTowerLightUI(color):
     colorUI = f"""
-                            <style>
-                                .circle-container {{
-                                        display: flex;
-                                        align-items: center;
-                                        justify-content: space-around;
-                                        height: 100px; /* Adjust height as needed */
-                                }}
-                                .circle-button {{
-                                        height: 40px;
-                                        width: 40px;
-                                        border-radius: 50%;
-                                        border: 1px solid #000;
-                                        box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
-                                }}
-                            </style>
                             <span class="circle-button" style=" background: {color};"></span>
                         """
     return colorUI
@@ -719,7 +731,7 @@ with st.container():
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
 
-            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.15rem;'>{RedColorUI} Alarm/Stop |{YellowColorUI} Waiting |{GreenColorUI} Running |{GreyColorUI} Machine Off |  <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> Technician Call </div>",
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.5rem;'><div class='legendDiv'>{RedColorUI} <span>Alarm/Stop</span></div> |<div class='legendDiv'>{YellowColorUI} <span>Waiting</span></div> |<div class='legendDiv'>{GreenColorUI} <span>Running</span></div> |<div class='legendDiv'>{GreyColorUI} <span>Machine Off</span></div> |  <div class='legendDiv'> <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Technician Call</span></div> </div>",
                     unsafe_allow_html=True)
                 
             st.markdown('---')
