@@ -641,9 +641,10 @@ def get_questdb_data(Position,StartDate, ToolingStation, MacID):
             WHERE timestamp > :StartDate 
             and ToolNo = :ToolingStation
             and MacID = :MacID
+            and Turret = :Turret
             and Run = 3"""
     StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    params = {"StartDate": StartDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID}
+    params = {"StartDate": StartDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID, "Turret": Position}
     with engine.connect() as conn:
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
@@ -652,14 +653,16 @@ def get_questdb_data_history(Position,StartDate,EndDate, ToolingStation, MacID):
     engine = get_Questdb_connection()
     QuestDbQuery="""
         SELECT * 
-        FROM MuratecStsLog"""+Position+"""
+        FROM MuratecStsLog
         WHERE timestamp > :StartDate 
         and timestamp < :EndDate
         and ToolNo = :ToolingStation
-        and MacID = :MacID"""
+        and MacID = :MacID
+        and Turret = :Turret
+        and Run = 3"""
     StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
     EndDate = EndDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-    params = {"StartDate": StartDate, "EndDate": EndDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID}
+    params = {"StartDate": StartDate, "EndDate": EndDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID, "Turret": Position}
     with engine.connect() as conn:
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
