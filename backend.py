@@ -843,6 +843,7 @@ def get_KPI_Data(MachineName):
         LEFT JOIN SPLOEE.DBO.OEEDownTime DT ON TL.OEEOutputKepID = DT.ID
         WHERE TN.MachineId = ? --AND TL.CreatedBy='OPCROUTER'
         AND TL.CreatedDate >= '2025-05-25 00:00:00.000' 
+        AND FORMAT(TL.CreatedDate, 'yyyyMM') >= FORMAT(DATEADD(MONTH, -6, GETDATE()), 'yyyyMM')
         -- AND ToolingMainCategory='LEFT' AND ToolingStation=303
         AND TL.CreatedDate NOT BETWEEN '2025/06/01' and '2025/06/02'
         AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
