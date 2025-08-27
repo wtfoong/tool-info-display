@@ -2,14 +2,16 @@ import streamlit as st
 from datetime import datetime,timedelta,date
 import time
 import pandas as pd
+import base64
+
 
 # import local module
 from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data
-from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data
+from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph
 
 # ---- Load app setting from config ----
 
@@ -44,6 +46,13 @@ def get_Current_Tool_Column_Data(MachineName, Position, ToolingStation,StartDate
     df_Tool_Data = merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, AlarmColumn, AlarmFilter,historyFlag=historyFlag, EndDate=EndDate)
     return df_Tool_Data
 
+@st.cache_data(ttl= DEFAULT_CACHE_LIFE)
+def get_KPI_Data_Cache(MachineName):
+
+    df_KPI_Data = get_KPI_Data(MachineName)
+
+    return df_KPI_Data
+
 
 def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDate):
     df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation,StartDate,EndDate)
@@ -59,14 +68,41 @@ st.set_page_config(page_title=page_title, layout="wide")
 # html meta tags to refresh at browser level
 #st.markdown(f'<meta http-equiv="refresh" content="{PAGE_REFRESH}">',unsafe_allow_html=True)
 
+# Inject global CSS styles
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 3rem !important;
+        }
+        .circle-container {
+                display: flex;
+                align-items: center;
+                justify-content: space-around;
+                height: 100px; /* Adjust height as needed */
+        }
+        .circle-button {
+                height: 40px;
+                width: 40px;
+                border-radius: 50%;
+                border: 1px solid #000;
+                box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
+        }
+        .legendDiv{
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        .legendDiv span {
+            margin-left: 1rem;
+        }
+
+    </style>
+""", unsafe_allow_html=True)
+
 # header
 st.markdown(
     f"""
-    <style>
-        .block-container {{
-            padding-top: 3rem !important;
-        }}
-    </style>
     <h1 style='text-align: center;'>{page_title}</h1>
     """,
     unsafe_allow_html=True
@@ -95,8 +131,15 @@ if 'clicked_machineID_History' not in st.session_state:
 
 if 'clicked_search_History' not in st.session_state:
     st.session_state.clicked_search_History = None
+    
+if 'clicked_KPI' not in st.session_state:
+    st.session_state.clicked_KPI = None
 
 # ---- Information Display ----
+
+# Read the image file and encode it to base64
+with open("plandwt.png", "rb") as image_file:
+    encoded_string = base64.b64encode(image_file.read()).decode()
 
 @st.fragment(run_every=str(PAGE_REFRESH)+"s")
 def ShowTimerInfo():
@@ -121,8 +164,8 @@ def ShowTimerInfo():
         
         with col2:
             # Header row
-            header_cols = st.columns([3, 2, 1, 1,1])
-            header_titles = ['Machine Condition', 'Count Down', 'Tool Detail', 'Inspection Detail','History']
+            header_cols = st.columns([3, 2, 1, 1,1,1])
+            header_titles = ['Machine Condition', 'Count Down', 'Insp Detail', 'Tool Detail', 'History','KPI']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
                     f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",
@@ -132,7 +175,7 @@ def ShowTimerInfo():
 
             for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
-                col_name, col_timer, col_tool, col_button, col_history = st.columns([3, 2, 1, 1,1])  # adjust ratios as needed
+                col_name, col_timer, col_button, col_tool, col_history, col_kpi = st.columns([3, 2, 1, 1,1,1])  # adjust ratios as needed
 
                 with col_name:
                     backGroundColor = (
@@ -145,10 +188,25 @@ def ShowTimerInfo():
                     colorUI = GetTowerLightUI(backGroundColor)
 
                     if row['TechRequired']:
-                        st.markdown(f"<div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'><strong>{row['Location']} 🧑‍🏭  {row['TechRequestMin']} mins</strong>{colorUI}</div>", unsafe_allow_html=True)
+                        st.markdown(f"""
+                                <div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'>
+                                    <strong>
+                                        {row['Location']} 
+                                        <span>
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
+                                            {row['TechRequestMin']} mins
+                                        </span>
+                                    </strong>{colorUI}</div>""", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 50px;'><strong>{row['Location']} <span style='color: gray; opacity: 0.2;'>🧑‍🏭  {row['TechRequestMin']} mins</span></strong>{colorUI} </div>""", unsafe_allow_html=True)
+                                <div class='circle-container' style='font-size: 50px;'>
+                                    <strong>
+                                        {row['Location']} 
+                                        <span style='color: gray; opacity: 0.2;'>
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']} mins
+                                        </span>
+                                    </strong>{colorUI}</div>""", unsafe_allow_html=True)                             
+
 
                 with col_timer:
                     backGroundColor, blink_style = set_timer_style(row['DurationMins'])
@@ -167,29 +225,11 @@ def ShowTimerInfo():
                         unsafe_allow_html=True,
                     )
 
-                with col_tool:
-                    st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
-
-                    # Store selected location for showing details at bottom section
-                    if st.button("Show 🛠️", key=f"btn_{row['Location']}", use_container_width=True):
-                        # #toggle off
-                        # if st.session_state.clicked_location == row['Location']:
-                        #     st.session_state.clicked_location = None # clear session state
-                        # #toggle on
-                        # else:
-                        st.session_state.clicked_location = row['Location'] # update session state
-
-                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
-                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
-                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
-                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
-
                 with col_button:
-                    # Store selected materialcode for plotting at bottom section
-                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"]
-                    buttonType = "primary" if float(LowestPpk) < 0.7 else "secondary"
-                    backGroundColor = "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
-                    color = "white" if float(LowestPpk) < 0.7 else "black"
+                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"] if st.session_state[f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"] else "N/A"
+                    buttonType = "primary" if LowestPpk == "N/A" else "primary" if float(LowestPpk) < 0.7 else "secondary"
+                    backGroundColor = '#00FF00' if LowestPpk == "N/A" else "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
+                    color = "black" if LowestPpk == "N/A" else "white" if float(LowestPpk) < 0.7 else "black"
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
                     with stylable_container(
                         key=f"insp{row['Location']}_button",
@@ -201,6 +241,7 @@ def ShowTimerInfo():
                             }}
                             """,
                     ):
+                        # Store selected materialcode for plotting at bottom section
                         if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True,type=buttonType):
                             # #toggle off
                             # if st.session_state.clicked_materialcode == row['MaterialCode']:
@@ -213,6 +254,27 @@ def ShowTimerInfo():
                             st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                             st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                             st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                            st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                            
+                with col_tool:
+                    buttonType = "primary" if row['LoadPeak_Alm_L'] or row['LoadPeak_Warn_L'] or row['LoadPeak_Alm_R'] or row['LoadPeak_Warn_R'] else 'secondary'
+
+                    st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
+
+                    # Store selected location for showing details at bottom section
+                    if st.button("Show 🛠️", key=f"btn_{row['Location']}", use_container_width=True,type=buttonType):
+                        # #toggle off
+                        # if st.session_state.clicked_location == row['Location']:
+                        #     st.session_state.clicked_location = None # clear session state
+                        # #toggle on
+                        # else:
+                        st.session_state.clicked_location = row['Location'] # update session state
+
+                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
+                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
+                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                        st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
 
                 with col_history:
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
@@ -229,7 +291,24 @@ def ShowTimerInfo():
                         st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
                         st.session_state.clicked_location = None # 👈 force close the clicked_location button
+                        st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+            
+                with col_kpi:
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
+                    if st.button("KPI 🛠️", key=f"btn_{row['Location']}_KPI", use_container_width=True):
+                        st.session_state.clicked_KPI = row['MachineID'] # update session state
+
+                        st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
+                        st.session_state.clicked_materialdesc = None  # 👈 Reset material description
+                        st.session_state.clicked_location = None # 👈 force close the clicked_location button
+                        st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                        st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                     
+                    
+                    
+                    
+                    
+                            
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
         col1, col2, col3 = st.columns([1,30,1])
@@ -265,7 +344,7 @@ def ShowTimerInfo():
 
                     cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1])  # Adjust column widths
                     cols[0].write(row['Turret'])
-                    cols[1].write(str(row['Tool']))
+                    cols[1].write(str(row['Tool'])+" ("+str(row['ToolNoID'])+")")
                     cols[2].write(row['Process'])
                     cols[3].write(str(row['PresetCounter']))
                     cols[4].write(str(row['TotalCounter']))
@@ -379,7 +458,7 @@ def ShowTimerInfo():
                 
                 st.markdown('---')
 
-    # ---- Bottom Section: Show History data for clicked_location ----
+    # ---- Bottom Section: Show History data for clicked_History ----
     with st.container():
         col1, col2, col3 = st.columns([1,30,1])
 
@@ -560,57 +639,102 @@ def ShowTimerInfo():
                                 st.plotly_chart(fig)
                 st.markdown('---')
 
+    # ---- Bottom Section: Show KPI data for clicked_KPI ----
+    with st.container():
+        col1, col2, col3 = st.columns([1,30,1])
+
+        with col2:
+            def clear_selection_clicked_location():
+                st.session_state.clicked_KPI = None
+
+            if st.session_state.clicked_KPI:
+                st.markdown('---')
+                st.button("❌ Close",key = f'close_{st.session_state.clicked_KPI}' , on_click=clear_selection_clicked_location)
+                st.markdown("### 📋 KPI")
+                st.info(f"Showing KPI data for: `{st.session_state.clicked_KPI}`")
+
+                
+                KPIDf = get_KPI_Data_Cache(
+                    MachineName=st.session_state.clicked_KPI
+                )
+
+                if KPIDf.empty:
+                    st.error(f"No data available for machine {st.session_state.clicked_KPI}")
+                else:
+                    
+                    df_low = KPIDf[KPIDf['PresetCounter'] < 1000]
+                    df_mid = KPIDf[(KPIDf['PresetCounter'] >= 1000) & (KPIDf['PresetCounter'] < 3000)]
+                    df_high = KPIDf[KPIDf['PresetCounter'] >= 3000]
+
+                    fig_low = plot_KPI_Graph(
+                        df_low,
+                        st.session_state.clicked_KPI,
+                    )
+                    fig_medium = plot_KPI_Graph(
+                        df_mid,
+                        st.session_state.clicked_KPI,
+                    )
+                    fig_high = plot_KPI_Graph(
+                        df_high,
+                        st.session_state.clicked_KPI,
+                    )
+                    if fig_low:
+                        st.plotly_chart(fig_low)
+                    if fig_medium:
+                        st.plotly_chart(fig_medium)
+                    if fig_high:
+                        st.plotly_chart(fig_high)
+                        
+                st.markdown('---')
 
 
 def GetTowerLightUI(color):
     colorUI = f"""
-                        <style>
-                            .circle-container {{
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: space-around;
-                                    height: 100px; /* Adjust height as needed */
-                            }}
-                            .circle-button {{
-                                    height: 40px;
-                                    width: 40px;
-                                    border-radius: 50%;
-                                    border: 1px solid #000;
-                                    box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.3);
-                            }}
-                        </style>
-                        <span class="circle-button" style=" background: {color};"></span>
+                            <span class="circle-button" style=" background: {color};"></span>
                         """
     return colorUI
 
+# @st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
+# def CalculateCPK():
+#     df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+#     filtered_df = df_tool_data.copy()
+#     for index, row in filtered_df.iterrows():
+#         materialcode = row['MaterialCode']
+#         if f'CurrentMachineMaterial_{materialcode}_LowestPpk' not in st.session_state:
+#             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = None
+        
+#         specnoList = get_CTQ_SpecNo_cached(materialcode)
+#         ppkList = []
+#         for specno in specnoList['BalloonNo'].unique():
+#             df_inspection_data = get_inspection_data_cached(materialcode, specno)
+#             if not df_inspection_data.empty:
+#                 # Calculate ppk
+#                 df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
+
+#                 df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
+
+#                 ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
+#                 ppkList.append(ppk)
+#         if ppkList:
+#             min_ppk = min(ppkList)
+#             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
+
+# CalculateCPK()   
+
 @st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
-def CalculateCPK():
-    df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+def GetLowestCPK():
+    df_tool_data = read_csv_data("LowestCPK.csv")
     filtered_df = df_tool_data.copy()
     for index, row in filtered_df.iterrows():
-        materialcode = row['MaterialCode']
-        if f'CurrentMachineMaterial_{materialcode}_LowestPpk' not in st.session_state:
-            st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = None
-        
-        specnoList = get_CTQ_SpecNo_cached(materialcode)
-        ppkList = []
-        for specno in specnoList['BalloonNo'].unique():
-            df_inspection_data = get_inspection_data_cached(materialcode, specno)
+        MachineID = row['MachineID']
+        if f'CurrentMachineMaterial_{MachineID}_LowestPpk' not in st.session_state:
+            st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = None
+        st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = (
+            None if pd.isna(row['Value']) else row['Value']
+        )
 
-            if not df_inspection_data.empty:
-                # Calculate ppk
-                df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
 
-                df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
-
-                ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
-                ppkList.append(ppk)
-                
-        if ppkList:
-            min_ppk = min(ppkList)
-            st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
-
-CalculateCPK()      
+GetLowestCPK()      
 ShowTimerInfo()
 
 with st.container():
@@ -624,9 +748,8 @@ with st.container():
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
 
-            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.15rem;'>{RedColorUI} Alarm/Stop |{YellowColorUI} Waiting |{GreenColorUI} Running |{GreyColorUI} Machine Off | <span style='font-size: 40px;'>🧑‍🏭</span> Technician Call </div>",
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.5rem;'><div class='legendDiv'>{RedColorUI} <span>Alarm/Stop</span></div> |<div class='legendDiv'>{YellowColorUI} <span>Waiting</span></div> |<div class='legendDiv'>{GreenColorUI} <span>Running</span></div> |<div class='legendDiv'>{GreyColorUI} <span>Machine Off</span></div> |  <div class='legendDiv'> <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Technician Call</span></div> </div>",
                     unsafe_allow_html=True)
-
                 
             st.markdown('---')
 
