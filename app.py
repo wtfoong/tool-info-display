@@ -226,7 +226,9 @@ def ShowTimerInfo():
                     )
 
                 with col_button:
-                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"] if st.session_state[f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"] else "N/A"
+                    
+                    key = f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"
+                    LowestPpk = st.session_state[key] if key in st.session_state and st.session_state[key] else "N/A"
                     buttonType = "primary" if LowestPpk == "N/A" else "primary" if float(LowestPpk) < 0.7 else "secondary"
                     backGroundColor = '#00FF00' if LowestPpk == "N/A" else "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
                     color = "black" if LowestPpk == "N/A" else "white" if float(LowestPpk) < 0.7 else "black"
