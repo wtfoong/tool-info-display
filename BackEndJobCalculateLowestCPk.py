@@ -39,4 +39,5 @@ def GetLowestCPK():
     # Save the results to a CSV file
     insert_data_into_csv(LowestCpkdataFrame, "LowestCPK.csv")
 
-GetLowestCPK()
+if __name__ == "__main__":
+    GetLowestCPK()
