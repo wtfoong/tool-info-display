@@ -366,7 +366,7 @@ def insert_data_into_csv(df, filename):
     If the file exists, append the data; otherwise, create a new file.
     """
     try:
-        df.to_csv(filename, mode='a', header=not pd.io.common.file_exists(filename), index=False)
+        df.to_csv(filename, mode='w', header=True, index=False)
         print(f"Data successfully inserted into {filename}")
     except Exception as e:
         print(f"Error inserting data into {filename}: {e}")
@@ -389,6 +389,10 @@ def read_csv_data(filename):
     
     
 def plot_KPI_Graph(df, machineName):
+    if df.empty:
+        print(f"No data available to plot KPI Graph for {machineName}")
+        return None
+    
     fig = go.Figure()
     df = df[['Year', 'Month', 'AvgCnt', 'ToolingStation', 'ToolingMainCategory']].copy()
 

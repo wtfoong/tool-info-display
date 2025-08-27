@@ -226,7 +226,7 @@ def ShowTimerInfo():
                     )
 
                 with col_button:
-                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"] if st.session_state[f"CurrentMachineMaterial_{row['MaterialCode']}_LowestPpk"] else "N/A"
+                    LowestPpk = st.session_state[f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"] if st.session_state[f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"] else "N/A"
                     buttonType = "primary" if LowestPpk == "N/A" else "primary" if float(LowestPpk) < 0.7 else "secondary"
                     backGroundColor = '#00FF00' if LowestPpk == "N/A" else "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
                     color = "black" if LowestPpk == "N/A" else "white" if float(LowestPpk) < 0.7 else "black"
@@ -662,9 +662,9 @@ def ShowTimerInfo():
                     st.error(f"No data available for machine {st.session_state.clicked_KPI}")
                 else:
                     
-                    df_low = KPIDf[KPIDf['AvgCnt'] < 1000]
-                    df_mid = KPIDf[(KPIDf['AvgCnt'] >= 1000) & (KPIDf['AvgCnt'] < 3000)]
-                    df_high = KPIDf[KPIDf['AvgCnt'] >= 3000]
+                    df_low = KPIDf[KPIDf['PresetCounter'] < 1000]
+                    df_mid = KPIDf[(KPIDf['PresetCounter'] >= 1000) & (KPIDf['PresetCounter'] < 3000)]
+                    df_high = KPIDf[KPIDf['PresetCounter'] >= 3000]
 
                     fig_low = plot_KPI_Graph(
                         df_low,
@@ -678,9 +678,13 @@ def ShowTimerInfo():
                         df_high,
                         st.session_state.clicked_KPI,
                     )
-                    st.plotly_chart(fig_low)
-                    st.plotly_chart(fig_medium)
-                    st.plotly_chart(fig_high)
+                    if fig_low:
+                        st.plotly_chart(fig_low)
+                    if fig_medium:
+                        st.plotly_chart(fig_medium)
+                    if fig_high:
+                        st.plotly_chart(fig_high)
+                        
                 st.markdown('---')
 
 
@@ -690,34 +694,47 @@ def GetTowerLightUI(color):
                         """
     return colorUI
 
+# @st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
+# def CalculateCPK():
+#     df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+#     filtered_df = df_tool_data.copy()
+#     for index, row in filtered_df.iterrows():
+#         materialcode = row['MaterialCode']
+#         if f'CurrentMachineMaterial_{materialcode}_LowestPpk' not in st.session_state:
+#             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = None
+        
+#         specnoList = get_CTQ_SpecNo_cached(materialcode)
+#         ppkList = []
+#         for specno in specnoList['BalloonNo'].unique():
+#             df_inspection_data = get_inspection_data_cached(materialcode, specno)
+#             if not df_inspection_data.empty:
+#                 # Calculate ppk
+#                 df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
+
+#                 df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
+
+#                 ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
+#                 ppkList.append(ppk)
+#         if ppkList:
+#             min_ppk = min(ppkList)
+#             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
+
+# CalculateCPK()   
+
 @st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
-def CalculateCPK():
-    df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+def GetLowestCPK():
+    df_tool_data = read_csv_data("LowestCPK.csv")
     filtered_df = df_tool_data.copy()
     for index, row in filtered_df.iterrows():
-        materialcode = row['MaterialCode']
-        if f'CurrentMachineMaterial_{materialcode}_LowestPpk' not in st.session_state:
-            st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = None
-        
-        specnoList = get_CTQ_SpecNo_cached(materialcode)
-        ppkList = []
-        for specno in specnoList['BalloonNo'].unique():
-            df_inspection_data = get_inspection_data_cached(materialcode, specno)
+        MachineID = row['MachineID']
+        if f'CurrentMachineMaterial_{MachineID}_LowestPpk' not in st.session_state:
+            st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = None
+        st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = (
+            None if pd.isna(row['Value']) else row['Value']
+        )
 
-            if not df_inspection_data.empty:
-                # Calculate ppk
-                df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
 
-                df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
-
-                ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
-                ppkList.append(ppk)
-                
-        if ppkList:
-            min_ppk = min(ppkList)
-            st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
-
-CalculateCPK()      
+GetLowestCPK()      
 ShowTimerInfo()
 
 with st.container():
