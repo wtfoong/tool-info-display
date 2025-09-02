@@ -244,7 +244,7 @@ def ShowTimerInfo():
                             """,
                     ):
                         # Store selected materialcode for plotting at bottom section
-                        if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MaterialCode']}", use_container_width=True,type=buttonType):
+                        if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MachineID']}", use_container_width=True,type=buttonType):
                             # #toggle off
                             # if st.session_state.clicked_materialcode == row['MaterialCode']:
                             #     st.session_state.clicked_materialcode = None # clear session state
