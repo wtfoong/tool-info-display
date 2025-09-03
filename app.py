@@ -150,7 +150,7 @@ def ShowTimerInfo():
         col1, col2, col3 = st.columns(3)
 
         with col2:
-            location_options = list(df_tool_data["Location"].unique())
+            location_options = sorted(df_tool_data["Location"].unique())
             selected_locations = st.multiselect(label = ' ', label_visibility='collapsed', options=location_options, placeholder='Choose Machine')
 
     filtered_df = df_tool_data.copy()
