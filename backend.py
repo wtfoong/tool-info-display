@@ -50,6 +50,21 @@ def get_OT_DataLake_db_connection():
     )
     return conn
 
+def get_DataMart_db_connection():
+    server = os.getenv("Datamart_SQL_SERVER")
+    database = os.getenv("Datamart_SQL_DATABASE")
+    username = os.getenv("Datamart_SQL_USERNAME")
+    password = os.getenv("Datamart_SQL_PASSWORD")
+
+    conn = pyodbc.connect(
+        f'DRIVER=ODBC Driver 17 for SQL Server;'
+        f'SERVER={server};'
+        f'DATABASE={database};'
+        f'UID={username};'
+        f'PWD={password};'
+        # 'Encrypt=yes;'
+    )
+    return conn
 
 def get_Questdb_connection():
     Qusername = os.getenv("QuestDB_Username")
@@ -624,7 +639,6 @@ def get_OT_Datalake_data_history(MachineName, Position, ToolingStation,StartDate
 
 
     QueryMachineName = f"%{MachineName}%TOOL_%{'L' if Position.upper() == 'LEFT' else 'R'}_T{str(ToolingStation)}%".replace("-","_")
-
     StartDate = StartDate.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     EndDate = EndDate.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     params = (ToolingStation,QueryMachineName, StartDate, EndDate)
@@ -768,6 +782,7 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         AND mmTool.ToolingMainCategory=@MainCategory
         AND mmTool.ToolingStation=@ToolStation
         AND DATEADD(HOUR, 8, TL.StartDate) BETWEEN @sDate AND @eDate
+        AND TL.Delflag = 0
         ORDER BY MACHINEID,SAPCode DESC
 
         --SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
@@ -849,6 +864,7 @@ def get_KPI_Data(MachineName):
         AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
         AND TL.ToolNoId NOT IN  (5649,5671,5652,5651) -- Testing Data 
         AND TL.TotalCounter > mmTool.PresetCounter * 0.2
+        AND TL.Delflag = 0
         GROUP BY mmTool.ToolID,mmTool.ToolingMaker,TN.MachineId,TN.Year,TN.Month,mmTool.PresetCounter,
         mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode
         ORDER BY mmTool.ToolingMainCategory,mmTool.ToolingStation,TN.Month
@@ -859,3 +875,22 @@ def get_KPI_Data(MachineName):
         conn.close()
 
         return df
+    
+def get_History_KPI_Data(MachineName,StartDate, EndDate):
+    query = f'''
+    SELECT *
+    FROM fact.MES_QMM_InspectionData
+    WHERE measdate BETWEEN ? AND DATEADD(DAY, 1, ?)
+        AND cat IN ('CTQ', 'CTP')
+        AND MachineId = ?
+    ORDER BY charid desc
+        , MeasDate desc
+        , SampleNo
+        , SubSampleNo
+    '''
+    params = (StartDate,EndDate,MachineName)
+    conn = get_DataMart_db_connection()
+    df = pd.read_sql(query, conn,params=params)
+    conn.close()
+
+    return df

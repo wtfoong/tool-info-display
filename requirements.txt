@@ -9,3 +9,4 @@ scipy
 psycopg2
 plotly
 streamlit-extras
+scikit-learn
