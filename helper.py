@@ -2,6 +2,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import plotly.figure_factory as ff
+
+from sklearn.preprocessing import StandardScaler
+from scipy.cluster.hierarchy import linkage, fcluster
+from datetime import datetime
+
 
 plt.style.use('dark_background') # #see all styles --> print(plt.style.available)
 
@@ -53,19 +59,20 @@ def calculate_cpk(series, usl, lsl):
     return f'{cpk:.3f}' # formatted to 3 decimal places
 
 
-def find_usl_lsl_for_cpk(series, target_cpk=1.0):
-    """
-    Given a 1D array of process data, calculate the minimum USL and maximum LSL
-    such that the Cpk is greater than or equal to the target_cpk.
-    """
-    mu = np.mean(series)
-    sigma = np.std(series, ddof=0) # population standard deviation 
+def find_usl_lsl_for_cpk(USL,LSL, target_cpk=1.0):
+
+    mu = np.mean([LSL,USL])
+
     # Calculate the required distance from mean to USL and LSL
-    margin = (3 * sigma) / target_cpk 
+    Green_margin = (USL-LSL)/(target_cpk*6)*1.5
+    Yellow_margin = (USL-LSL)/(target_cpk*6)*3
     # Determine USL and LSL
-    usl = mu + margin
-    lsl = mu - margin   
-    return round(usl, 3), round(lsl, 3)
+    Gusl = Green_margin + mu
+    Glsl = mu - Green_margin   
+    Yusl = Yellow_margin + mu
+    Ylsl = mu - Yellow_margin
+
+    return round(Gusl, 3), round(Glsl, 3), round(Yusl, 3), round(Ylsl, 3)
 
 def GroupDfByPiecesMade(df, IsMax=True):
     if IsMax:
@@ -82,7 +89,6 @@ def GroupDfByPiecesMade(df, IsMax=True):
 
 # ---- plot IMR ----
 def plot_IMR(df, usl, lsl,title):
-
     df = df.sort_values(by='MeasDate').reset_index(drop=True)
 
     # Calculate I and MR values
@@ -95,9 +101,8 @@ def plot_IMR(df, usl, lsl,title):
     UCL_I = I_bar + 2.66 * MR_bar
     LCL_I = I_bar - 2.66 * MR_bar
     UCL_MR = 3.268 * MR_bar
-    GUSL,GLSL = find_usl_lsl_for_cpk(df['MeasVal'], target_cpk=1.0) # calculate USL and LSL for Cpk >= 1.0
-    YUSL,YLSL = find_usl_lsl_for_cpk(df['MeasVal'], target_cpk=0.9) # calculate USL and LSL for Cpk >= 1.0
-
+    GUSL,GLSL,YUSL,YLSL = find_usl_lsl_for_cpk(usl, lsl, target_cpk=1.0) # calculate USL and LSL for Cpk >= 1.0
+    
     # Set X-axis as categorical using index (MeasDate are not evenly spaced - very cluttered continuous plot)
     df['X'] = range(len(df))
 
@@ -147,11 +152,15 @@ def plot_IMR(df, usl, lsl,title):
     plt.tight_layout()
     return fig
 
-def plotIMRByPlotly(df, usl, lsl,title):
+def plotIMRByPlotly(df, usl, lsl,title,isHistorical = False):
     df = df.sort_values(by='MeasDate').reset_index(drop=True)
-
     # Calculate I and MR values
-    df['I'] = df['MeasVal']
+    
+    if 'MeasValue' in df.columns:
+        df['I'] = df['MeasValue']
+    else:
+        df['I'] = df['MeasVal']
+
     df['MR'] = df['I'].diff().abs()
 
     # Calculate control limits
@@ -160,8 +169,7 @@ def plotIMRByPlotly(df, usl, lsl,title):
     UCL_I = I_bar + 2.66 * MR_bar
     LCL_I = I_bar - 2.66 * MR_bar
     UCL_MR = 3.268 * MR_bar
-    GUSL,GLSL = find_usl_lsl_for_cpk(df['MeasVal'], target_cpk=1.0) # calculate USL and LSL for Cpk >= 1.0
-    YUSL,YLSL = find_usl_lsl_for_cpk(df['MeasVal'], target_cpk=0.9) # calculate USL and LSL for Cpk >= 1.0
+    GUSL,GLSL,YUSL,YLSL = find_usl_lsl_for_cpk(usl, lsl, target_cpk=1.0) # calculate USL and LSL for Cpk >= 1.0
 
     # Set X-axis as categorical using index (MeasDate are not evenly spaced - very cluttered continuous plot)
     df['X'] = range(len(df))
@@ -172,7 +180,7 @@ def plotIMRByPlotly(df, usl, lsl,title):
     selected_ticks = all_ticks
     if len(selected_ticks) == 0 or selected_ticks.iloc[-1] != all_ticks.iloc[-1]: # show last label too
         selected_ticks = pd.concat([pd.Series(selected_ticks), pd.Series([all_ticks.iloc[-1]])], ignore_index=True)
-    selected_labels = df['MeasDate'].dt.strftime('%m-%d %H:%M')
+    selected_labels = df['MeasDate'].dt.strftime('%b-%d %H:%M')
 
     # Create Plotly figure
     fig = go.Figure()
@@ -359,7 +367,6 @@ def plot_RPMGraph(df,start_date):
     
     return fig
     
-
 def insert_data_into_csv(df, filename):
     """
     Insert data into a CSV file.
@@ -386,8 +393,7 @@ def read_csv_data(filename):
     except Exception as e:
         print(f"Error reading data from {filename}: {e}")
         return pd.DataFrame()  
-    
-    
+        
 def plot_KPI_Graph(df, machineName):
     if df.empty:
         print(f"No data available to plot KPI Graph for {machineName}")
@@ -429,12 +435,13 @@ def plot_KPI_Graph(df, machineName):
     for i, year_month in enumerate(pivot_df.columns):
         text_vals = pct_df[year_month].round(1)
         text_vals = text_vals.where(text_vals.notna(), '')
+        formatted_name = datetime.strptime(year_month, "%Y-%m").strftime("%Y-%b")
 
 
         fig.add_trace(go.Bar(
             x=tool_sides,
             y=pivot_df[year_month],
-            name=year_month,
+            name=formatted_name,
             text=text_vals,
             texttemplate='%{y:,.0f} (%{text:+.1f}%)',
             textfont=dict(size=15, color='white'),
@@ -455,7 +462,7 @@ def plot_KPI_Graph(df, machineName):
             fig.add_annotation(
                 x=x_pos,
                 y=-10,  # Adjust based on your y-axis range
-                text=year_month,
+                text=formatted_name,
                 showarrow=False,
                 font=dict(size=12, color='white'),
                 textangle=-45,
@@ -488,3 +495,96 @@ def plot_KPI_Graph(df, machineName):
     fig.update_traces(cliponaxis=False)
 
     return fig
+
+def plotNormalDistributionPlotly(df,title):
+    fig = go.Figure()
+    
+    # Create KDE curve using create_distplot
+    hist_data = [df['TotalCounter']]
+    group_labels = ['TotalCounter']
+    fig_kde = ff.create_distplot(hist_data, group_labels,
+                                 show_hist=False, show_curve=True,colors=['white'])
+    
+    # Extract KDE curve trace and scale y-values to number of records
+    kde_trace = fig_kde.data[0]
+    kde_trace_scaled = go.Scatter(
+        x=kde_trace.x,
+        y=[y * len(df['TotalCounter'])*50 for y in kde_trace.y],
+        mode='lines',
+        name='KDE Curve (Scaled)',
+        line=dict(color='white')
+    )
+
+    # Define bin edges
+    nbins = 20
+    bin_edges = np.histogram_bin_edges(df['TotalCounter'], bins=nbins)
+    
+    # Assign each record to a bin
+    bin_indices = np.digitize(df['TotalCounter'], bin_edges, right=False)
+    
+    # Aggregate hover text per bin
+    hover_text_by_bin = {}
+    for idx, bin_idx in enumerate(bin_indices):
+        if bin_idx not in hover_text_by_bin:
+            hover_text_by_bin[bin_idx] = []
+        hover_text_by_bin[bin_idx].append(f"ToolID: {df['ToolNoID'][idx]}, CompletedDate: {df['CompletedDate'][idx]}, TotalCounter: {df['TotalCounter'][idx]}")
+    
+    # Create final hover text list for each bin
+    final_hover_texts = []
+    counts = []
+    x_vals = []
+    for bin_idx in sorted(hover_text_by_bin.keys()):
+        bin_center = (bin_edges[bin_idx-1] + bin_edges[bin_idx-1]) / 2
+        x_vals.append(bin_center)
+        counts.append(len(hover_text_by_bin[bin_idx]))
+        final_hover_texts.append("<br>".join(hover_text_by_bin[bin_idx]))
+    
+    # Create bar chart manually to allow custom hover text
+    fig.add_trace(go.Bar(
+        x=x_vals,
+        y=counts,
+        name='Counter Frequency',
+        marker_color='skyblue',
+        hovertext=final_hover_texts,
+        hoverinfo='text',
+        text=counts,  # This adds the y-values as text labels
+        textfont=dict(size=15, color='white'),
+        textposition='outside'  # Positions the text labels outside the bars
+    ))
+    
+    # Add KDE curve
+    fig.add_trace(kde_trace_scaled)
+
+    # Add vertical line for preset counter
+    fig.add_shape(
+        type="line",
+        x0=df['PresetCounter'][0], x1=df['PresetCounter'][0],
+        y0=0, y1=1,
+        line=dict(color="red", width=2, dash="dash"),
+        xref='x', yref='paper'
+    )
+    
+    # Add annotation for the preset line
+    fig.add_annotation(x=df['PresetCounter'][0], y=1, yref='paper', text=f'Preset Counter ({df["PresetCounter"][0]})',
+                       showarrow=True, arrowhead=1, ax=0, ay=-40)
+    
+    # Update layout
+    fig.update_layout(
+        title="Frequency Distribution of :"+title,
+        xaxis_title="Counter",
+        yaxis_title="Number of Records",
+        bargap=0.1,
+        height=500
+    )
+    return fig
+
+def BalanceClustering(df):
+    # Extract and scale the relevant feature
+    X = df[['Balance (mins)']]
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # Apply hierarchical clustering using a very tight distance threshold (0.1)
+    linked = linkage(X_scaled, method='ward')
+    df['Hierarchical_Distance'] = fcluster(linked, t=0.1, criterion='distance')
+    return df

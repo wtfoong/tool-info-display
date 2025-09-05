@@ -10,8 +10,8 @@ from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data
-from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data,get_History_KPI_Data
+from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph,plotNormalDistributionPlotly,BalanceClustering
 
 # ---- Load app setting from config ----
 
@@ -58,10 +58,14 @@ def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDa
     df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation,StartDate,EndDate)
     return df_Tool_Data
 
+def get_KPI_History_Data(MachineName,StartDate,EndDate):
+    df_KPI_History = get_History_KPI_Data(MachineName,StartDate,EndDate)
+    return df_KPI_History
 
 # ---- UI ----
 # ---- Page config ----
 page_title = config['app']['title']
+Tool_Change_min = config['thresholds']['ToolChange_min']
 st.set_page_config(page_title=page_title, layout="wide")
 
 #! deprecating! UI flickers and lost session state...(filter selection etc gone...)
@@ -134,6 +138,9 @@ if 'clicked_search_History' not in st.session_state:
     
 if 'clicked_KPI' not in st.session_state:
     st.session_state.clicked_KPI = None
+    
+if 'clicked_NormalDistribution' not in st.session_state:
+    st.session_state.clicked_NormalDistribution = None
 
 # ---- Information Display ----
 
@@ -145,7 +152,7 @@ with open("plandwt.png", "rb") as image_file:
 def ShowTimerInfo():
     df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
 
-    # ---- Filters ----
+    # ---- Filters ---- 
     with st.container():
         col1, col2, col3 = st.columns(3)
 
@@ -159,25 +166,56 @@ def ShowTimerInfo():
         filtered_df = filtered_df[filtered_df["Location"].isin(selected_locations)]
     
     st.markdown(f"<p style='text-align: center; color: grey;'>Last refreshed: {last_refresh}</p>", unsafe_allow_html=True)
-    with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+    with st.container(height=70):
+        col1, col2, col3 = st.columns([1,40,1])
         
         with col2:
             # Header row
-            header_cols = st.columns([3, 2, 1, 1,1,1])
-            header_titles = ['Machine Condition', 'Count Down', 'Insp Detail', 'Tool Detail', 'History','KPI']
+            header_cols = st.columns([1,1,1, 1,1,1, 1, 1,1,1])
+            header_titles = ['Machine','Tech Call','Status','Count Down','Change Time','Tool Change', 'Tool Detail', 'History', 'Insp Detail','KPI']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
-                    f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25rem; font-weight: bold;'>{title}</div>",
+                    f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25vw; font-weight: bold;'>{title}</div>",
                     unsafe_allow_html=True
                 )
 
-
+    with st.container(height=600):
+        col1, col2, col3 = st.columns([1,60,1])
+        
+        with col2:
             for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
-                col_name, col_timer, col_button, col_tool, col_history, col_kpi = st.columns([3, 2, 1, 1,1,1])  # adjust ratios as needed
+                col_name,colTechCall,colMacStatus, col_timer,colChangeTime,colToolChange, col_tool, col_history, col_button, col_kpi = st.columns([1,1,1, 1,1,1, 1, 1,1,1])  # adjust ratios as needed
 
                 with col_name:
+                     st.markdown(f"""
+                                <div class='circle-container' style='font-size: 2.5vw;'>
+                                    <strong>
+                                        {row['Location']} 
+                                    </strong></div>""", unsafe_allow_html=True)  
+                    
+
+                with colTechCall:
+
+
+                    if row['TechRequired']:
+                        st.markdown(f"""
+                                <div class='circle-container' style='font-size: 1.8vw;animation: blinker 1s linear infinite;'>
+                                    <strong>
+                                        <span>
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
+                                            {row['TechRequestMin']} mins
+                                        </span>
+                                    </strong></div>""", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"""
+                                <div class='circle-container' style='font-size: 1.8vw;'>
+                                    <strong>
+                                        <span style='color: gray; opacity: 0.2;'>
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']} mins
+                                        </span>
+                                    </strong></div>""", unsafe_allow_html=True)                                                     
+                with colMacStatus:
                     backGroundColor = (
                         'red' if row['MacLEDRed'] else
                         '#FFBF00' if row['MacLEDYellow'] else
@@ -187,26 +225,9 @@ def ShowTimerInfo():
                     
                     colorUI = GetTowerLightUI(backGroundColor)
 
-                    if row['TechRequired']:
-                        st.markdown(f"""
-                                <div class='circle-container' style='font-size: 50px;animation: blinker 1s linear infinite;'>
-                                    <strong>
-                                        {row['Location']} 
-                                        <span>
-                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
-                                            {row['TechRequestMin']} mins
-                                        </span>
-                                    </strong>{colorUI}</div>""", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
+                    st.markdown(f"""
                                 <div class='circle-container' style='font-size: 50px;'>
-                                    <strong>
-                                        {row['Location']} 
-                                        <span style='color: gray; opacity: 0.2;'>
-                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']} mins
-                                        </span>
-                                    </strong>{colorUI}</div>""", unsafe_allow_html=True)                             
-
+                                    </strong>{colorUI}</div>""", unsafe_allow_html=True) 
 
                 with col_timer:
                     backGroundColor, blink_style = set_timer_style(row['DurationMins'])
@@ -218,45 +239,56 @@ def ShowTimerInfo():
                                 50% {{ opacity: 0; }}
                             }}
                         </style>
-                        <div style="color: {backGroundColor}; font-size: 50px; {blink_style}">
-                            {row['DurationMins']} mins
+                        <div style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};display:flex;justify-content: space-evenly;">
+                            <span>{row['DurationMins']} mins</span>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
+                with colChangeTime:
+                    backGroundColor, blink_style = set_timer_style(row['DurationMins'])
+                    currentTime = datetime.now()
+                    ToolChangeTime = currentTime + timedelta(minutes=row['DurationMins'])
 
-                with col_button:
-                    
-                    key = f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"
-                    LowestPpk = st.session_state[key] if key in st.session_state and st.session_state[key] else "N/A"
-                    buttonType = "primary" if LowestPpk == "N/A" else "primary" if float(LowestPpk) < 0.7 else "secondary"
-                    backGroundColor = '#00FF00' if LowestPpk == "N/A" else "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
-                    color = "black" if LowestPpk == "N/A" else "white" if float(LowestPpk) < 0.7 else "black"
-                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
-                    with stylable_container(
-                        key=f"insp{row['Location']}_button",
-                        css_styles=f"""
-                            button {{
-                                background-color: {backGroundColor};
-                                color: {color};
-                                border: 1px solid #000;
+                    st.markdown(
+                        f"""
+                        <style>
+                            @keyframes blinker {{
+                                50% {{ opacity: 0; }}
                             }}
-                            """,
-                    ):
-                        # Store selected materialcode for plotting at bottom section
-                        if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MachineID']}", use_container_width=True,type=buttonType):
-                            # #toggle off
-                            # if st.session_state.clicked_materialcode == row['MaterialCode']:
-                            #     st.session_state.clicked_materialcode = None # clear session state
-                            # #toggle on
-                            # else:
-                            st.session_state.clicked_materialcode = row['MaterialCode'] # update session state
-                            st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
+                        </style>
+                        <div style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};display:flex;justify-content: space-evenly;">
+                            <span>{ToolChangeTime.strftime('%I:%M %p').lstrip('0')}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    
+                with colToolChange:
+                    cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter']
+                    df = df_tool_data_all[df_tool_data_all['Location']==row['Location']]
+                    df = df[cols].reset_index(drop=True)
+                    df = df[cols].reset_index(drop=True)
+                    df = BalanceClustering(df)
+                    
+                    min_balance = df['Balance (mins)'].min()
+                    min_cluster = df[df['Balance (mins)'] == min_balance]['Hierarchical_Distance'].iloc[0]
+                    filtered_df = df[(df['Hierarchical_Distance'] == min_cluster) | (df['Balance (mins)'] <= (min_balance + Tool_Change_min))]
+                    backGroundColor, blink_style = set_timer_style(row['DurationMins'])
 
-                            st.session_state.clicked_location = None  # 👈 force close the clicked_location button
-                            st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
-                            st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
-                            st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                    st.markdown(
+                        f"""
+                        <style>
+                            @keyframes blinker {{
+                                50% {{ opacity: 0; }}
+                            }}
+                        </style>
+                        <div style="color: {backGroundColor}; font-size: 1.99vw; {blink_style}; display:flex;justify-content: space-evenly;">
+                            <span>{len(filtered_df)}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )                    
                             
                 with col_tool:
                     buttonType = "primary" if row['LoadPeak_Alm_L'] or row['LoadPeak_Warn_L'] or row['LoadPeak_Alm_R'] or row['LoadPeak_Warn_R'] else 'secondary'
@@ -295,6 +327,39 @@ def ShowTimerInfo():
                         st.session_state.clicked_location = None # 👈 force close the clicked_location button
                         st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
             
+                with col_button:
+                    
+                    key = f"CurrentMachineMaterial_{row['MachineID']}_LowestPpk"
+                    LowestPpk = st.session_state[key] if key in st.session_state and st.session_state[key] else "N/A"
+                    buttonType = "primary" if LowestPpk == "N/A" else "primary" if float(LowestPpk) < 0.7 else "secondary"
+                    backGroundColor = '#00FF00' if LowestPpk == "N/A" else "red" if float(LowestPpk) < 0.7 else '#00FF00' if float(LowestPpk) > 1.0 else '#FFBF00'
+                    color = "black" if LowestPpk == "N/A" else "white" if float(LowestPpk) < 0.7 else "black"
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
+                    with stylable_container(
+                        key=f"insp{row['Location']}_button",
+                        css_styles=f"""
+                            button {{
+                                background-color: {backGroundColor};
+                                color: {color};
+                                border: 1px solid #000;
+                            }}
+                            """,
+                    ):
+                        # Store selected materialcode for plotting at bottom section
+                        if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MachineID']}", use_container_width=True,type=buttonType):
+                            # #toggle off
+                            # if st.session_state.clicked_materialcode == row['MaterialCode']:
+                            #     st.session_state.clicked_materialcode = None # clear session state
+                            # #toggle on
+                            # else:
+                            st.session_state.clicked_materialcode = row['MaterialCode'] # update session state
+                            st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
+
+                            st.session_state.clicked_location = None  # 👈 force close the clicked_location button
+                            st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+                            st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                            st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                            
                 with col_kpi:
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
                     if st.button("KPI 🛠️", key=f"btn_{row['Location']}_KPI", use_container_width=True):
@@ -305,15 +370,10 @@ def ShowTimerInfo():
                         st.session_state.clicked_location = None # 👈 force close the clicked_location button
                         st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                         st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
-                    
-                    
-                    
-                    
-                    
                             
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+        col1, col2, col3 = st.columns([1,40,1])
 
         with col2:
             def clear_selection_clicked_location():
@@ -328,6 +388,12 @@ def ShowTimerInfo():
                 cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location]
                 df = df[cols].reset_index(drop=True)
+                df = BalanceClustering(df)
+                #print(df)
+                min_balance = df['Balance (mins)'].min()
+                min_cluster = df[df['Balance (mins)'] == min_balance]['Hierarchical_Distance'].iloc[0]
+
+                #min_balance = df['Balance (mins)'].min() + Tool_Change_min
 
                 # Header row
                 header_cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1])
@@ -343,16 +409,24 @@ def ShowTimerInfo():
 
                     if f'visible_graph_row_{i}' not in st.session_state:
                         st.session_state[f'visible_graph_row_{i}'] = None
+                    
+                    # Check if this row should be highlighted
+                    #highlight = row['Balance (mins)'] <= min_balance
+                    highlight = row['Hierarchical_Distance'] == min_cluster or row['Balance (mins)'] <= (min_balance + Tool_Change_min)
+                    
+                    style = "background-color: #ff3333; padding: 5px;" if highlight else ""
+
 
                     cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1])  # Adjust column widths
-                    cols[0].write(row['Turret'])
-                    cols[1].write(str(row['Tool'])+" ("+str(row['ToolNoID'])+")")
-                    cols[2].write(row['Process'])
-                    cols[3].write(str(row['PresetCounter']))
-                    cols[4].write(str(row['TotalCounter']))
-                    
-                    cols[5].write(str(row['Balance (pcs)']))
-                    cols[6].write(str(row['Balance (mins)']))
+
+                    cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True)
+                    cols[1].markdown(f"<div style='{style}'>{row['Tool']} ({row['ToolNoID']})</div>", unsafe_allow_html=True)
+                    cols[2].markdown(f"<div>{row['Process']}</div>", unsafe_allow_html=True)
+                    cols[3].markdown(f"<div>{row['PresetCounter']}</div>", unsafe_allow_html=True)
+                    cols[4].markdown(f"<div>{row['TotalCounter']}</div>", unsafe_allow_html=True)
+                    cols[5].markdown(f"<div>{row['Balance (pcs)']}</div>", unsafe_allow_html=True)
+                    cols[6].markdown(f"<div style='{style}'>{row['Balance (mins)']}</div>", unsafe_allow_html=True)
+
                         
 
                     if cols[7].button("LoadX", key=f"btn_LoadX_{i}"):
@@ -451,7 +525,7 @@ def ShowTimerInfo():
 
                         st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
                         title =f"SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}"
-                        fig = plotIMRByPlotly(df_inspection_data,df_inspection_data['LSL'].iloc[0],df_inspection_data['USL'].iloc[0],title = title) 
+                        fig = plotIMRByPlotly(df_inspection_data,df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0],title = title) 
                         #st.pyplot(fig)
                         st.plotly_chart(fig)
                     else:
@@ -477,8 +551,8 @@ def ShowTimerInfo():
                 cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location_History]
                 df = df[cols].reset_index(drop=True)
-                
-                ColOptionTurret, ColOptionStation, ColStartDatePicker, ColEndDatePicker,ColSearchButton = st.columns([1,1,1,1,1])
+
+                ColOptionTurret, ColOptionStation, ColStartDatePicker, ColEndDatePicker,ColSearchButton,ColNormalDistribution = st.columns([1,1,1,1,1,1])
                 OptionTurret= ''
                 OptionStation = ''
                 StartDate = None
@@ -492,7 +566,7 @@ def ShowTimerInfo():
                 with ColOptionStation:
                     if OptionTurret:
                         # Filter tools based on selected turret
-                        filtered_tools = df[df['Turret'] == OptionTurret]['Tool'].unique()
+                        filtered_tools = sorted(df[df['Turret'] == OptionTurret]['Tool'].unique())
                         OptionStation = st.selectbox(
                             "Station",
                             options=filtered_tools,
@@ -530,8 +604,23 @@ def ShowTimerInfo():
                             st.session_state.clicked_search_History = None
                         else:
                             st.session_state.clicked_search_History = st.session_state.clicked_machineID_History
-
-
+                            st.session_state.clicked_NormalDistribution = None
+                            
+                with ColNormalDistribution:
+                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
+                    if st.button("Tool Analysis", use_container_width=True):
+                        #all selection need to be made else show error
+                        if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                            st.error("Please select Turret, Station and Date Range to search.")
+                            st.session_state.clicked_NormalDistribution = None
+                        # Check if Start Date is before or equal to End Date
+                        elif StartDate > EndDate:
+                            st.error("Start Date must be earlier than or equal to End Date.")
+                            st.session_state.clicked_NormalDistribution = None
+                        else:
+                            st.session_state.clicked_NormalDistribution = st.session_state.clicked_machineID_History
+                            st.session_state.clicked_search_History = None
+                            
                 if st.session_state.clicked_search_History:
                     if not OptionTurret or not OptionStation or not StartDate or not EndDate:
                         st.session_state.clicked_search_History = None
@@ -639,6 +728,58 @@ def ShowTimerInfo():
 
                                 #st.pyplot(fig)
                                 st.plotly_chart(fig)
+                
+                if st.session_state.clicked_NormalDistribution:
+                    if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                        st.session_state.clicked_NormalDistribution = None
+                        return
+                    # Check if Start Date is before or equal to End Date
+                    elif StartDate > EndDate:
+                        st.error("Start Date must be earlier than or equal to End Date.")
+                        return
+                    
+                    df_history = get_History_Tool_Data(
+                        MachineName=st.session_state.clicked_NormalDistribution,
+                        Position=OptionTurret, 
+                        ToolingStation=OptionStation,  
+                        StartDate=StartDate,  
+                        EndDate=EndDate
+                    )
+                    
+                    df_PPKHistory = get_KPI_History_Data(
+                        MachineName= st.session_state.clicked_NormalDistribution,
+                        StartDate=StartDate,  
+                        EndDate=EndDate
+                    )
+                    if df_history.empty:
+                                st.error(f"No data available for {st.session_state.clicked_NormalDistribution}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
+                    else:
+                        fig = plotNormalDistributionPlotly(df_history,title=f"Normal Distribution for {st.session_state.clicked_NormalDistribution}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}")
+                        st.plotly_chart(fig)
+                    
+                    if df_PPKHistory.empty:
+                        st.error(f"No inspection data available for {st.session_state.clicked_NormalDistribution}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
+                    else:
+                        grouped = df_PPKHistory.groupby(['ControlPlanId', 'CharId'])
+                        separated_df = {f"ControlPlanId{cp}_CharId_{i}": group for (cp, i), group in grouped}
+                        
+                        
+                        for name, table in separated_df.items():
+                             # Calculate ppk
+                            table['LSL'] = pd.to_numeric(table['LSL'], errors='coerce')
+            
+                            table['USL'] = pd.to_numeric(table['USL'], errors='coerce')
+                            table['MeasValue']= pd.to_numeric(table['MeasValue'], errors='coerce')
+
+                            ppk = calculate_ppk(table['MeasValue'],table['USL'].iloc[0],table['LSL'].iloc[0])
+                            title =f"SpecNo:{table['SpecNo'].iloc[0]}| {table['DimensionDesc'].iloc[0]} | Ppk = {ppk}"
+                            st.info(f"Ppk for: {table['MaterialCode'].iloc[0]} | {table['MaterialDesc'].iloc[0]} | {title}")
+                            
+                            #fig = plotIMRByPlotly(table,table['USL'].iloc[0],table['LSL'].iloc[0],title = title) 
+                            #st.pyplot(fig)
+                            #st.plotly_chart(fig)
+
+
                 st.markdown('---')
 
     # ---- Bottom Section: Show KPI data for clicked_KPI ----
