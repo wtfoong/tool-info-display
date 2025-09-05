@@ -166,7 +166,7 @@ def ShowTimerInfo():
         filtered_df = filtered_df[filtered_df["Location"].isin(selected_locations)]
     
     st.markdown(f"<p style='text-align: center; color: grey;'>Last refreshed: {last_refresh}</p>", unsafe_allow_html=True)
-    with st.container():
+    with st.container(height=70):
         col1, col2, col3 = st.columns([1,40,1])
         
         with col2:
@@ -179,7 +179,10 @@ def ShowTimerInfo():
                     unsafe_allow_html=True
                 )
 
-
+    with st.container(height=600):
+        col1, col2, col3 = st.columns([1,60,1])
+        
+        with col2:
             for index, row in filtered_df.iterrows():   
                 # Create 3 columns: machine name | timer | button
                 col_name,colTechCall,colMacStatus, col_timer,colChangeTime,colToolChange, col_tool, col_history, col_button, col_kpi = st.columns([1,1,1, 1,1,1, 1, 1,1,1])  # adjust ratios as needed
@@ -370,7 +373,7 @@ def ShowTimerInfo():
                             
     # ---- Bottom Section: Show tool data for clicked_location ----
     with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+        col1, col2, col3 = st.columns([1,40,1])
 
         with col2:
             def clear_selection_clicked_location():

@@ -11,6 +11,7 @@ thresholds:
   duration_min:
     red: 0
     amber: 10
+  ToolChange_min: 30
 
 data:
   source_path: "./data/tool_data.csv" # placeholder, used to stored dimension list later
