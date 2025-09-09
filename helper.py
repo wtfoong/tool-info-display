@@ -502,18 +502,21 @@ def plotNormalDistributionPlotly(df,title):
     # Create KDE curve using create_distplot
     hist_data = [df['TotalCounter']]
     group_labels = ['TotalCounter']
-    fig_kde = ff.create_distplot(hist_data, group_labels,
+    if len(df) > 1:
+        fig_kde = ff.create_distplot(hist_data, group_labels,
                                  show_hist=False, show_curve=True,colors=['white'])
     
-    # Extract KDE curve trace and scale y-values to number of records
-    kde_trace = fig_kde.data[0]
-    kde_trace_scaled = go.Scatter(
-        x=kde_trace.x,
-        y=[y * len(df['TotalCounter'])*50 for y in kde_trace.y],
-        mode='lines',
-        name='KDE Curve (Scaled)',
-        line=dict(color='white')
-    )
+        # Extract KDE curve trace and scale y-values to number of records
+        kde_trace = fig_kde.data[0]
+        kde_trace_scaled = go.Scatter(
+            x=kde_trace.x,
+            y=[y * len(df['TotalCounter'])*50 for y in kde_trace.y],
+            mode='lines',
+            name='KDE Curve (Scaled)',
+            line=dict(color='white')
+        )
+        # Add KDE curve
+        fig.add_trace(kde_trace_scaled)
 
     # Define bin edges
     nbins = 20

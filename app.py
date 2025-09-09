@@ -179,7 +179,7 @@ def ShowTimerInfo():
                     unsafe_allow_html=True
                 )
 
-    with st.container(height=600):
+    with st.container(height=700):
         col1, col2, col3 = st.columns([1,60,1])
         
         with col2:
@@ -371,15 +371,21 @@ def ShowTimerInfo():
                         st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                         st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                             
+
+    # Placeholder for dynamic content
+    placeholder = st.empty()
+
     # ---- Bottom Section: Show tool data for clicked_location ----
-    with st.container():
-        col1, col2, col3 = st.columns([1,40,1])
+    if st.session_state.clicked_location:
+        with placeholder.container():
+            col1, col2, col3 = st.columns([1,40,1])
 
-        with col2:
-            def clear_selection_clicked_location():
-                st.session_state.clicked_location = None
+            with col2:
+                def clear_selection_clicked_location():
+                    st.session_state.clicked_location = None
+                    placeholder.empty()
 
-            if st.session_state.clicked_location:
+                
                 st.markdown('---')
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_location}' , on_click=clear_selection_clicked_location)
                 st.markdown("### 📋 Upcoming Tool Change")
@@ -497,14 +503,16 @@ def ShowTimerInfo():
                 st.markdown('---')
 
     # ---- Bottom Section: Show IMR Chart for clicked_materialcode ----
-    with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+    if st.session_state.clicked_materialcode:
+        with placeholder.container():
+            col1, col2, col3 = st.columns([1,30,1])
 
-        with col2:
-            def clear_selection_clicked_materialcode():
-                st.session_state.clicked_materialcode = None
+            with col2:
+                def clear_selection_clicked_materialcode():
+                    st.session_state.clicked_materialcode = None
+                    placeholder.empty()
 
-            if st.session_state.clicked_materialcode:
+                
                 st.markdown('---')
                 st.markdown("### 🔍 Loading Inspection Details (CTQ & CTP)...")
 
@@ -535,14 +543,16 @@ def ShowTimerInfo():
                 st.markdown('---')
 
     # ---- Bottom Section: Show History data for clicked_History ----
-    with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+    if st.session_state.clicked_location_History:
+        with placeholder.container():
+            col1, col2, col3 = st.columns([1,30,1])
 
-        with col2:
-            def clear_selection_clicked_location():
-                st.session_state.clicked_location_History = None
+            with col2:
+                def clear_selection_clicked_location():
+                    st.session_state.clicked_location_History = None
+                    placeholder.empty()
 
-            if st.session_state.clicked_location_History:
+                
                 st.markdown('---')
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_location_History}' , on_click=clear_selection_clicked_location)
                 st.markdown("### 📋 History Tool Change")
@@ -765,7 +775,7 @@ def ShowTimerInfo():
                         
                         
                         for name, table in separated_df.items():
-                             # Calculate ppk
+                            # Calculate ppk
                             table['LSL'] = pd.to_numeric(table['LSL'], errors='coerce')
             
                             table['USL'] = pd.to_numeric(table['USL'], errors='coerce')
@@ -783,14 +793,15 @@ def ShowTimerInfo():
                 st.markdown('---')
 
     # ---- Bottom Section: Show KPI data for clicked_KPI ----
-    with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+    if st.session_state.clicked_KPI:
+        with st.container():
+            col1, col2, col3 = st.columns([1,30,1])
 
-        with col2:
-            def clear_selection_clicked_location():
-                st.session_state.clicked_KPI = None
+            with col2:
+                def clear_selection_clicked_location():
+                    st.session_state.clicked_KPI = None
+                    placeholder.empty()
 
-            if st.session_state.clicked_KPI:
                 st.markdown('---')
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_KPI}' , on_click=clear_selection_clicked_location)
                 st.markdown("### 📋 KPI")
