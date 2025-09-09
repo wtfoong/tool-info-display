@@ -239,7 +239,7 @@ def ShowTimerInfo():
                                 50% {{ opacity: 0; }}
                             }}
                         </style>
-                        <div style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};display:flex;justify-content: space-evenly;">
+                        <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
                             <span>{row['DurationMins']} mins</span>
                         </div>
                         """,
