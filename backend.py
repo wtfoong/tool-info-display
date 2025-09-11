@@ -257,7 +257,7 @@ def load_data(limit: int = 1000):
         FROM #ToolSummary
         LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
 
-        SELECT * FROM #ToolSummary ORDER BY MacLEDRed desc,MacLEDYellow desc,DurationMins
+        SELECT * FROM #ToolSummary ORDER BY MacLEDRed desc,MacLEDYellow desc,TechRequired desc,MacLEDGreen desc,DurationMins
 
         DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo,#ToolSummary,#DT,#MacInfo
         '''
