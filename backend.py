@@ -810,10 +810,10 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
 
         ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,StartDate,CompletedDate,
-        SUM(TotalCounter) TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm
+        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,min(StartDate)StartDate,max(CompletedDate)CompletedDate,
+        SUM(TotalCounter) TotalCounter,Max(PresetCounter)PresetCounter,max(LoadX_Alm)LoadX_Alm,max(LoadZ_Alm)LoadZ_Alm
         INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,StartDate,CompletedDate,PresetCounter,LoadX_Alm,LoadZ_Alm
+        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation
         ORDER BY MachineID,ToolingMainCategory,ToolingStation
 
         SELECT #TL.*, 
@@ -876,7 +876,7 @@ def get_KPI_Data(MachineName):
 
         return df
     
-def get_History_KPI_Data(MachineName,StartDate, EndDate):
+def get_History_Inspection_Data(MachineName,StartDate, EndDate):
     query = f'''
     SELECT *
     FROM fact.MES_QMM_InspectionData
