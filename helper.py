@@ -554,9 +554,6 @@ def plotNormalDistributionPlotly(df,title):
         textfont=dict(size=15, color='white'),
         textposition='outside'  # Positions the text labels outside the bars
     ))
-    
-    # Add KDE curve
-    fig.add_trace(kde_trace_scaled)
 
     # Add vertical line for preset counter
     fig.add_shape(

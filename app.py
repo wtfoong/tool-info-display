@@ -10,7 +10,7 @@ from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data,get_History_KPI_Data
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data,get_History_Inspection_Data
 from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph,plotNormalDistributionPlotly,BalanceClustering
 
 # ---- Load app setting from config ----
@@ -58,9 +58,9 @@ def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDa
     df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation,StartDate,EndDate)
     return df_Tool_Data
 
-def get_KPI_History_Data(MachineName,StartDate,EndDate):
-    df_KPI_History = get_History_KPI_Data(MachineName,StartDate,EndDate)
-    return df_KPI_History
+def get_Inspection_History_Data(MachineName,StartDate,EndDate):
+    df_Inspection_History = get_History_Inspection_Data(MachineName,StartDate,EndDate)
+    return df_Inspection_History
 
 # ---- UI ----
 # ---- Page config ----
@@ -756,7 +756,7 @@ def ShowTimerInfo():
                         EndDate=EndDate
                     )
                     
-                    df_PPKHistory = get_KPI_History_Data(
+                    df_PPKHistory = get_Inspection_History_Data(
                         MachineName= st.session_state.clicked_NormalDistribution,
                         StartDate=StartDate,  
                         EndDate=EndDate
