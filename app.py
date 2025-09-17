@@ -139,6 +139,9 @@ if 'clicked_search_History' not in st.session_state:
 if 'clicked_KPI' not in st.session_state:
     st.session_state.clicked_KPI = None
     
+if 'clicked_Common_Location' not in st.session_state:
+    st.session_state.clicked_Common_Location = None
+    
 if 'clicked_NormalDistribution' not in st.session_state:
     st.session_state.clicked_NormalDistribution = None
 
@@ -354,6 +357,7 @@ def ShowTimerInfo():
                             # else:
                             st.session_state.clicked_materialcode = row['MaterialCode'] # update session state
                             st.session_state.clicked_materialdesc = row['MaterialDesc'] # update session state
+                            st.session_state.clicked_Common_Location = row['Location']
 
                             st.session_state.clicked_location = None  # 👈 force close the clicked_location button
                             st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
@@ -364,6 +368,7 @@ def ShowTimerInfo():
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
                     if st.button("KPI 🛠️", key=f"btn_{row['Location']}_KPI", use_container_width=True):
                         st.session_state.clicked_KPI = row['MachineID'] # update session state
+                        st.session_state.clicked_Common_Location = row['Location']
 
                         st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
@@ -388,10 +393,9 @@ def ShowTimerInfo():
                 
                 st.markdown('---')
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_location}' , on_click=clear_selection_clicked_location)
-                st.markdown("### 📋 Upcoming Tool Change")
-                st.info(f"Showing data for: `{st.session_state.clicked_location}`")
+                st.markdown(f"### 📋 Upcoming Tool Change for {st.session_state.clicked_location}")
 
-                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
+                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm','mmToolID']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location]
                 df = df[cols].reset_index(drop=True)
                 df = BalanceClustering(df)
@@ -427,7 +431,7 @@ def ShowTimerInfo():
 
                     cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True)
                     cols[1].markdown(f"<div style='{style}'>{row['Tool']} ({row['ToolNoID']})</div>", unsafe_allow_html=True)
-                    cols[2].markdown(f"<div>{row['Process']}</div>", unsafe_allow_html=True)
+                    cols[2].markdown(f"<div>{row['Process']} - {row['mmToolID']}</div>", unsafe_allow_html=True)
                     cols[3].markdown(f"<div>{row['PresetCounter']}</div>", unsafe_allow_html=True)
                     cols[4].markdown(f"<div>{row['TotalCounter']}</div>", unsafe_allow_html=True)
                     cols[5].markdown(f"<div>{row['Balance (pcs)']}</div>", unsafe_allow_html=True)
@@ -514,7 +518,7 @@ def ShowTimerInfo():
 
                 
                 st.markdown('---')
-                st.markdown("### 🔍 Loading Inspection Details (CTQ & CTP)...")
+                st.markdown(f"### 🔍 Loading Inspection Details (CTQ & CTP) For {st.session_state.clicked_Common_Location} ...")
 
                 materialcode = st.session_state.clicked_materialcode
                 materialdesc = st.session_state.clicked_materialdesc
@@ -531,7 +535,7 @@ def ShowTimerInfo():
 
                         ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
 
-                        st.info(f"Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
+                        st.info(f"#### Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
                         title =f"SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}"
                         fig = plotIMRByPlotly(df_inspection_data,df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0],title = title) 
                         #st.pyplot(fig)
@@ -555,8 +559,7 @@ def ShowTimerInfo():
                 
                 st.markdown('---')
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_location_History}' , on_click=clear_selection_clicked_location)
-                st.markdown("### 📋 History Tool Change")
-                st.info(f"Showing history data for: `{st.session_state.clicked_location_History}`")
+                st.markdown(f"### 📋 History Tool Change for: {st.session_state.clicked_location_History}")
                 
                 cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location_History]
@@ -647,7 +650,7 @@ def ShowTimerInfo():
                         StartDate=StartDate,  
                         EndDate=EndDate
                     )
-                    cols = ['Turret','Tool','Process','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter','CompletedDate','LoadX_Alm', 'LoadZ_Alm']
+                    cols = ['Turret','Tool','Process','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter','CompletedDate','LoadX_Alm', 'LoadZ_Alm','mmToolID']
                     df_history = df_history[cols].reset_index(drop=True)
                 
                     # Header row
@@ -668,7 +671,7 @@ def ShowTimerInfo():
 
                         cols = st.columns([1, 2, 1,1,1,1,1])  # Adjust column widths
                         cols[0].write(str(row['ToolNoID']))
-                        cols[1].write(row['Process'])
+                        cols[1].write(f"{row['Process']} - {row['mmToolID']}")
                         #cols[2].write(str(row['PresetCounter']))
                         cols[2].write(str(row['TotalCounter']))
                         cols[3].write(str(row['StartDate']))
@@ -762,13 +765,13 @@ def ShowTimerInfo():
                         EndDate=EndDate
                     )
                     if df_history.empty:
-                                st.error(f"No data available for {st.session_state.clicked_NormalDistribution}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
+                                st.error(f"No data available for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
                     else:
-                        fig = plotNormalDistributionPlotly(df_history,title=f"Normal Distribution for {st.session_state.clicked_NormalDistribution}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}")
+                        fig = plotNormalDistributionPlotly(df_history,title=f"Normal Distribution for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}")
                         st.plotly_chart(fig)
                     
                     if df_PPKHistory.empty:
-                        st.error(f"No inspection data available for {st.session_state.clicked_NormalDistribution}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
+                        st.error(f"No inspection data available for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
                     else:
                         grouped = df_PPKHistory.groupby(['ControlPlanId', 'CharId'])
                         separated_df = {f"ControlPlanId{cp}_CharId_{i}": group for (cp, i), group in grouped}
@@ -804,8 +807,7 @@ def ShowTimerInfo():
 
                 st.markdown('---')
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_KPI}' , on_click=clear_selection_clicked_location)
-                st.markdown("### 📋 KPI")
-                st.info(f"Showing KPI data for: `{st.session_state.clicked_KPI}`")
+                st.markdown(f"### 📋 KPI (Key Performance Indicator) for: {st.session_state.clicked_Common_Location}")
 
                 
                 KPIDf = get_KPI_Data_Cache(
@@ -822,15 +824,15 @@ def ShowTimerInfo():
 
                     fig_low = plot_KPI_Graph(
                         df_low,
-                        st.session_state.clicked_KPI,
+                        st.session_state.clicked_Common_Location
                     )
                     fig_medium = plot_KPI_Graph(
                         df_mid,
-                        st.session_state.clicked_KPI,
+                        st.session_state.clicked_Common_Location
                     )
                     fig_high = plot_KPI_Graph(
                         df_high,
-                        st.session_state.clicked_KPI,
+                        st.session_state.clicked_Common_Location
                     )
                     if fig_low:
                         st.plotly_chart(fig_low)

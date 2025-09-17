@@ -394,19 +394,19 @@ def read_csv_data(filename):
         print(f"Error reading data from {filename}: {e}")
         return pd.DataFrame()  
         
-def plot_KPI_Graph(df, machineName):
+def plot_KPI_Graph(df, locationName):
     if df.empty:
-        print(f"No data available to plot KPI Graph for {machineName}")
+        print(f"No data available to plot KPI Graph for {locationName}")
         return None
     
     fig = go.Figure()
-    df = df[['Year', 'Month', 'AvgCnt', 'ToolingStation', 'ToolingMainCategory']].copy()
+    df = df[['Year', 'Month', 'AvgCnt', 'ToolingStation', 'ToolingMainCategory','ToolingSubCategory','mmToolID']].copy()
 
     # Create a 'Year-Month' column
     df['YearMonth'] = df['Year'].astype(str) + '-' + df['Month'].astype(str).str.zfill(2)
 
     # Create a unique identifier for each tool and side
-    df['ToolSide'] = df['ToolingStation'].astype(str) + '_' + df['ToolingMainCategory']
+    df['ToolSide'] = df['ToolingMainCategory'] + '_' + df['ToolingStation'].astype(str)+" : "+df['ToolingSubCategory'] +" - "+ df['mmToolID']
 
     # Pivot the data for plotting
     pivot_df = df.pivot_table(index='ToolSide', columns='YearMonth', values='AvgCnt')
@@ -472,7 +472,7 @@ def plot_KPI_Graph(df, machineName):
 
     # Update layout
     fig.update_layout(
-        title=dict(text=f"KPI Graph for {machineName}", 
+        title=dict(text=f"KPI Graph for {locationName}", 
         x=0.5,  # Center the title
         xanchor='center',
         font=dict(size=16, color='white')

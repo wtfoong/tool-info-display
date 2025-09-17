@@ -336,9 +336,9 @@ def load_data_all():
         AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
 
         ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm
+        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm,mmToolID
         INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm
+        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm,mmToolID
         ORDER BY MachineID,ToolingMainCategory,ToolingStation
 
         SELECT #TL.*,(#TL.PresetCounter-#TL.TotalCounter) Balance, 
@@ -467,7 +467,7 @@ def load_data_all():
 
 
         SELECT
-        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm
+        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm,mmToolID
         FROM #ToolInfo
         ORDER BY Location, DurationMins
 
@@ -811,9 +811,9 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
 
         ------------------------------------------- ToolLifeDetails In Group ------------------------------------
         SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,min(StartDate)StartDate,max(CompletedDate)CompletedDate,
-        SUM(TotalCounter) TotalCounter,Max(PresetCounter)PresetCounter,max(LoadX_Alm)LoadX_Alm,max(LoadZ_Alm)LoadZ_Alm
+        SUM(TotalCounter) TotalCounter,Max(PresetCounter)PresetCounter,max(LoadX_Alm)LoadX_Alm,max(LoadZ_Alm)LoadZ_Alm,mmToolID
         INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation
+        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,mmToolID
         ORDER BY MachineID,ToolingMainCategory,ToolingStation
 
         SELECT #TL.*, 
@@ -824,7 +824,7 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         LEFT OUTER JOIN #WCMachineID ON #TL.MachineID=#WCMachineID.MachineID
 
         SELECT
-        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm, CompletedDate 
+        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm, CompletedDate ,mmToolID
         FROM #ToolInfo
         Where TotalCounter > 0
         ORDER BY ToolNoID Desc 
