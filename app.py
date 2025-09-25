@@ -208,6 +208,7 @@ def ShowTimerInfo():
                     if row['TechRequired']:
                         st.markdown(f"""
                                 <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
+
                                     <strong>
                                         <span>
                                             <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
@@ -217,6 +218,7 @@ def ShowTimerInfo():
                     else:
                         st.markdown(f"""
                                 <div class='circle-container' style='font-size: 1.99vw;'>
+
                                     <strong>
                                         <span style='color: gray; opacity: 0.2;'>
                                             <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']}
