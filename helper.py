@@ -15,6 +15,8 @@ plt.style.use('dark_background') # #see all styles --> print(plt.style.available
 from config_loader import load_config
 from scipy.stats import norm,linregress
 from datetime import datetime
+from backend import get_questdb_offset_history
+
 config = load_config()
 
 # ---- set timer style ----
@@ -588,3 +590,56 @@ def BalanceClustering(df):
     linked = linkage(X_scaled, method='ward')
     df['Hierarchical_Distance'] = fcluster(linked, t=0.1, criterion='distance')
     return df
+
+def plot_OffSet_History_Graph(df,selectedStation,selectedAxis,MachineName):
+    Tools = df['ToolNoID'].unique()
+    # Create the Plotly figure
+    fig = go.Figure()
+    
+    for tool in Tools:
+        CurrentToolDf = df[df['ToolNoID']==tool]
+        CurrentToolAllData = pd.DataFrame()
+        columnName = f"Offset{selectedAxis}_{selectedStation:02}"
+        ChangeOffsetColumnName = f"OffsetChange{selectedAxis}_{selectedStation:02}"
+        for row in CurrentToolDf.itertuples(index=False):
+            ToolOffsetDF = get_questdb_offset_history(MachineName=row.MachineID,Position=row.Turret,StartDate=row.StartDate,EndDate=row.CompletedDate,ToolNo=int(selectedStation))
+            GroupedData = ToolOffsetDF.groupby(f'T{selectedStation:02}_Bal')[[columnName]].max().reset_index()
+            GroupedData = GroupedData.sort_values(by=[f'T{selectedStation:02}_Bal'], ascending=[False]).reset_index(drop=True)
+            GroupedData['Count'] = range(1, len(GroupedData) + 1)
+            GroupedData = GroupedData.iloc[65:]
+            firstRecord = GroupedData[columnName].iloc[0]
+            GroupedData[ChangeOffsetColumnName] = GroupedData[columnName] - firstRecord
+            CurrentToolAllData = pd.concat([CurrentToolAllData, GroupedData], ignore_index=True)
+            
+    
+    
+        
+        hovertext=[
+            f'{CurrentToolDf.iloc[0]["Turret"]} - {selectedStation} offset {selectedAxis}: {tool} - x: {x_val}, y: {y_val:.4f}'
+            for x_val, y_val in zip(CurrentToolAllData['Count'], CurrentToolAllData[ChangeOffsetColumnName])
+        ]
+
+        fig.add_trace(go.Scatter(
+            x=CurrentToolAllData['Count'],
+            y=CurrentToolAllData[ChangeOffsetColumnName],
+            mode='lines',
+            name=f'{CurrentToolDf.iloc[0]["Turret"]} - {selectedStation} offset {selectedAxis}:  {tool}',
+            hovertext=hovertext,
+            hoverinfo='text',
+            line=dict(width=1)
+        ))
+
+    # Update layout for styling
+    fig.update_layout(
+        title=f'Diff of Offest {selectedAxis}',
+        xaxis_title='Counter',
+        yaxis_title='Offset difference',
+        legend=dict(font=dict(size=12)),
+        width=1200,
+        height=400,
+        xaxis=dict(tickangle=45, tickfont=dict(size=13)),
+        yaxis=dict(tickfont=dict(size=13)),
+        showlegend=True,
+    )
+
+    return fig

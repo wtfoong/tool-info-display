@@ -10,8 +10,8 @@ from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container
 config = load_config()
 
-from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data,get_History_Inspection_Data
-from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph,plotNormalDistributionPlotly,BalanceClustering
+from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data,get_History_Inspection_Data,get_questdb_offset_history
+from helper import set_timer_style, plot_IMR, calculate_ppk,plot_selected_columns_by_pieces_made,plot_RPMGraph,plotIMRByPlotly,read_csv_data,plot_KPI_Graph,plotNormalDistributionPlotly,BalanceClustering,plot_OffSet_History_Graph
 
 # ---- Load app setting from config ----
 
@@ -53,6 +53,10 @@ def get_KPI_Data_Cache(MachineName):
 
     return df_KPI_Data
 
+@st.cache_data(ttl= INSPECTION_DATA_CACHE)
+def get_Current_Tool_Offset_History(MachineName, Position,StartDate, EndDate):
+    df_Offet_Data = get_questdb_offset_history(MachineName, Position,StartDate, EndDate)
+    return df_Offet_Data
 
 def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDate):
     df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation,StartDate,EndDate)
@@ -203,19 +207,19 @@ def ShowTimerInfo():
 
                     if row['TechRequired']:
                         st.markdown(f"""
-                                <div class='circle-container' style='font-size: 1.4vw;animation: blinker 1s linear infinite;'>
+                                <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
                                     <strong>
                                         <span>
                                             <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
-                                            {row['TechRequestMin']} mins
+                                            {row['TechRequestMin']}
                                         </span>
                                     </strong></div>""", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
-                                <div class='circle-container' style='font-size: 1.4vw;'>
+                                <div class='circle-container' style='font-size: 1.99vw;'>
                                     <strong>
                                         <span style='color: gray; opacity: 0.2;'>
-                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']} mins
+                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']}
                                         </span>
                                     </strong></div>""", unsafe_allow_html=True)                                                     
                 with colMacStatus:
@@ -229,7 +233,7 @@ def ShowTimerInfo():
                     colorUI = GetTowerLightUI(backGroundColor)
 
                     st.markdown(f"""
-                                <div class='circle-container' style='font-size: 50px;'>
+                                <div class='circle-container' style='font-size:50px;'>
                                     </strong>{colorUI}</div>""", unsafe_allow_html=True) 
 
                 with col_timer:
@@ -243,7 +247,7 @@ def ShowTimerInfo():
                             }}
                         </style>
                         <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
-                            <span>{row['DurationMins']} mins</span>
+                            <span>{row['DurationMins']}</span>
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -769,6 +773,10 @@ def ShowTimerInfo():
                     else:
                         fig = plotNormalDistributionPlotly(df_history,title=f"Normal Distribution for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}")
                         st.plotly_chart(fig)
+                        offsetX_fig = plot_OffSet_History_Graph(df=df_history,selectedStation=OptionStation,selectedAxis='X',MachineName=st.session_state.clicked_NormalDistribution)
+                        offsetZ_fig = plot_OffSet_History_Graph(df=df_history,selectedStation=OptionStation,selectedAxis='Z',MachineName=st.session_state.clicked_NormalDistribution)
+                        st.plotly_chart(offsetX_fig)
+                        st.plotly_chart(offsetZ_fig)
                     
                     if df_PPKHistory.empty:
                         st.error(f"No inspection data available for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
@@ -904,7 +912,7 @@ with st.container():
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
 
-            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.5rem;'><div class='legendDiv'>{RedColorUI} <span>Alarm/Stop</span></div> |<div class='legendDiv'>{YellowColorUI} <span>Waiting</span></div> |<div class='legendDiv'>{GreenColorUI} <span>Running</span></div> |<div class='legendDiv'>{GreyColorUI} <span>Machine Off</span></div> |  <div class='legendDiv'> <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Technician Call</span></div> </div>",
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.5rem;'><div class='legendDiv'>{RedColorUI} <span>Alarm/Stop</span></div> |<div class='legendDiv'>{YellowColorUI} <span>Waiting</span></div> |<div class='legendDiv'>{GreenColorUI} <span>Running</span></div> |<div class='legendDiv'>{GreyColorUI} <span>Machine Off</span></div> |  <div class='legendDiv'> <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Technician Call</span></div> | <div class='legendDiv'><span>Technician Call & Count Down: mins</span></div> </div>",
                     unsafe_allow_html=True)
                 
             st.markdown('---')
