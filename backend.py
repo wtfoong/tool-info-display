@@ -176,6 +176,7 @@ def load_data(limit: int = 1000):
         MacLEDYellow BIT,
         MacLEDRed BIT,
         MacStatus INT,
+        MacStopMins INT,
         LoadPeak_Alm_L BIT,
         LoadPeak_Warn_L BIT,
         LoadPeak_Alm_R BIT,
@@ -185,7 +186,7 @@ def load_data(limit: int = 1000):
         WHILE @RowNum <= @TotalRow
         BEGIN
             INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0 
+                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0,0 
             FROM #ToolInfo
             WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
@@ -200,7 +201,7 @@ def load_data(limit: int = 1000):
         SELECT TOP 1 @ProdnShift=Shift,@PrevDay=CAST(PreviousDay AS INT) FROM mdm.dbo.TSHIFT
         WHERE Plant=@Plant AND ISNULL(DelFlag,0)=0 AND CAST(getdate() AS TIME)
         BETWEEN StartTime AND EndTime
-        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
+        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
 
         SELECT DT.ID,Kep.MacID,DT.TechRequired,
         DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin
@@ -217,7 +218,6 @@ def load_data(limit: int = 1000):
         FROM #ToolSummary
         LEFT OUTER JOIN #DT ON #DT.MacID=#ToolSummary.MachineID
 
-
         -- ================================ MATERIAL CODE ========================
         --SELECT MachineID,MaterialCode INTO #Session
         --FROM [SPLOEE].[dbo].[Session] Session
@@ -225,10 +225,19 @@ def load_data(limit: int = 1000):
         --AND SessionStatus='RUNNING'
 
         --UPDATE #ToolSummary SET
-        --	#ToolSummary.MaterialCode=#Session.MaterialCode,
-        --	#ToolSummary.MaterialDesc=#Session.MaterialDescription
+        -- #ToolSummary.MaterialCode=#Session.MaterialCode,
+        -- #ToolSummary.MaterialDesc=#Session.MaterialDescription
         --FROM #ToolSummary
         --LEFT OUTER JOIN #Session ON #Session.MachineID=#ToolSummary.MachineID
+
+        ------------------------------------------- Machine Stop Duration ------------------------------------
+        SELECT Kep.ID,Kep.ProdnDate,Kep.ProdnShift,Kep.MacID,Kep.RecordType, 
+        DATEDIFF(MINUTE, (CASE WHEN Kep.RecordType='STOP' THEN Kep.StartTime ELSE GetDate() END), GetDate()) AS MacStopMin
+        INTO #MacStatus
+        FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep
+        JOIN (SELECT MAX(ID) ID, Macid FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep2 
+                WHERE Kep2.ProdnDate=@ProdnDate AND Kep2.ProdnShift=@ProdnShift
+                Group By Macid) AS Kep2 ON (Kep.ID = Kep2.ID)
 
         ------------------------------------------- Machine Status (LED + Status) ------------------------------------
         ;WITH CTE1 AS (
@@ -241,8 +250,8 @@ def load_data(limit: int = 1000):
         LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
         INTO #MacInfo FROM CTE1
         LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
-                          LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
-                   FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
+                            LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
+                    FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
         ON R1.InMacID = CTE1.InMacID and R1.ID = CTE1.MaxID;
 
         UPDATE #ToolSummary SET
@@ -253,13 +262,18 @@ def load_data(limit: int = 1000):
         #ToolSummary.LoadPeak_Alm_L=ISNULL(#MacInfo.LoadPeak_Alm_L,0),
         #ToolSummary.LoadPeak_Warn_L=ISNULL(#MacInfo.LoadPeak_Warn_L,0),
         #ToolSummary.LoadPeak_Alm_R=ISNULL(#MacInfo.LoadPeak_Alm_R,0),
-        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0)
+        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0),
+        #ToolSummary.MacStopMins=ISNULL(#MacStatus.MacStopMin,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
+        LEFT OUTER JOIN #MacStatus ON #MacStatus.MacID=#ToolSummary.MachineID
 
-        SELECT * FROM #ToolSummary ORDER BY MacLEDRed desc,MacLEDYellow desc,TechRequired desc,MacLEDGreen desc,DurationMins
+        SELECT * FROM #ToolSummary ORDER BY MacLEDRed DESC,MacLEDYellow DESC,TechRequired desc,MacLEDGreen desc,DurationMins
 
-        DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo,#ToolSummary,#DT,#MacInfo
+        -- SELECT * FROM #ToolSummary ORDER BY DurationMins
+        -- SELECT * FROM #ToolInfo ORDER BY DurationMins
+
+        DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo,#ToolSummary,#DT,#MacInfo,#MacStatus
         '''
         df = pd.read_sql(query, conn)
         conn.close()
@@ -283,7 +297,8 @@ def load_data(limit: int = 1000):
                     'LoadPeak_Alm_L':False,
                     'LoadPeak_Warn_L':False,
                     'LoadPeak_Alm_R':False,
-                    'LoadPeak_Warn_R':False}
+                    'LoadPeak_Warn_R':False,
+                    'MacStopMins':'0'}
         df = pd.DataFrame(data_demo)
 
     return df
@@ -893,4 +908,24 @@ def get_History_Inspection_Data(MachineName,StartDate, EndDate):
     df = pd.read_sql(query, conn,params=params)
     conn.close()
 
+    return df
+
+def get_questdb_offset_history(MachineName, Position, StartDate, EndDate,ToolNo):
+    engine = get_Questdb_connection()
+    QuestDbQuery="""
+           SELECT * 
+            FROM MuratecStsLog
+            WHERE timestamp > :StartDate 
+            and timestamp < :CompletedDate
+            and run  = 3 
+            and toolno = :ToolNo
+            and Turret = :Turret
+            and MacID = :MacID 
+            order by timestamp"""
+    
+    StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    EndDate = EndDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    params = {"StartDate": StartDate,"CompletedDate":EndDate,"Turret":Position,"ToolNo":ToolNo, "MacID": MachineName}
+    with engine.connect() as conn:
+        df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
