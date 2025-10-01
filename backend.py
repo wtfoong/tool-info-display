@@ -172,6 +172,7 @@ def load_data(limit: int = 1000):
         DurationMins INT,
         TechRequired BIT,
         TechRequestMin INT,
+        MacErrorType INT,
         MacLEDGreen BIT,
         MacLEDYellow BIT,
         MacLEDRed BIT,
@@ -186,7 +187,7 @@ def load_data(limit: int = 1000):
         WHILE @RowNum <= @TotalRow
         BEGIN
             INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0,0 
+                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0,0,0 
             FROM #ToolInfo
             WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
@@ -204,7 +205,8 @@ def load_data(limit: int = 1000):
         SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
 
         SELECT DT.ID,Kep.MacID,DT.TechRequired,
-        DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin
+        DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin,
+        (CASE WHEN DTReason LIKE '%MHA%' THEN 2 ELSE 1 END) MacErrorType
         INTO #DT FROM [SPLOEE].[dbo].[OEEDownTime] DT
         LEFT OUTER JOIN [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep ON DT.ID=Kep.ID
         WHERE Kep.ProdnDate=@ProdnDate AND Kep.ProdnShift=@ProdnShift
@@ -214,7 +216,8 @@ def load_data(limit: int = 1000):
 
         UPDATE #ToolSummary
         SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0),
-            #ToolSummary.TechRequestMin=ISNULL(#DT.TechRequestMin,0)
+            #ToolSummary.TechRequestMin=ISNULL(#DT.TechRequestMin,0),
+            #ToolSummary.MacErrorType=ISNULL(#DT.MacErrorType,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #DT ON #DT.MacID=#ToolSummary.MachineID
 
@@ -231,13 +234,13 @@ def load_data(limit: int = 1000):
         --LEFT OUTER JOIN #Session ON #Session.MachineID=#ToolSummary.MachineID
 
         ------------------------------------------- Machine Stop Duration ------------------------------------
-        SELECT Kep.ID,Kep.ProdnDate,Kep.ProdnShift,Kep.MacID,Kep.RecordType, 
-        DATEDIFF(MINUTE, (CASE WHEN Kep.RecordType='STOP' THEN Kep.StartTime ELSE GetDate() END), GetDate()) AS MacStopMin
-        INTO #MacStatus
-        FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep
-        JOIN (SELECT MAX(ID) ID, Macid FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep2 
-                WHERE Kep2.ProdnDate=@ProdnDate AND Kep2.ProdnShift=@ProdnShift
-                Group By Macid) AS Kep2 ON (Kep.ID = Kep2.ID)
+        --SELECT Kep.ID,Kep.ProdnDate,Kep.ProdnShift,Kep.MacID,Kep.RecordType, 
+        --DATEDIFF(MINUTE, (CASE WHEN Kep.RecordType='STOP' THEN Kep.StartTime ELSE GetDate() END), GetDate()) AS MacStopMin
+        --INTO #MacStatus
+        --FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep
+        --JOIN (SELECT MAX(ID) ID, Macid FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep2 
+        --        WHERE Kep2.ProdnDate=@ProdnDate AND Kep2.ProdnShift=@ProdnShift
+        --        Group By Macid) AS Kep2 ON (Kep.ID = Kep2.ID)
 
         ------------------------------------------- Machine Status (LED + Status) ------------------------------------
         ;WITH CTE1 AS (
@@ -262,14 +265,11 @@ def load_data(limit: int = 1000):
         #ToolSummary.LoadPeak_Alm_L=ISNULL(#MacInfo.LoadPeak_Alm_L,0),
         #ToolSummary.LoadPeak_Warn_L=ISNULL(#MacInfo.LoadPeak_Warn_L,0),
         #ToolSummary.LoadPeak_Alm_R=ISNULL(#MacInfo.LoadPeak_Alm_R,0),
-        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0),
-        #ToolSummary.MacStopMins=ISNULL(#MacStatus.MacStopMin,0)
+        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0)
         FROM #ToolSummary
         LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
-        LEFT OUTER JOIN #MacStatus ON #MacStatus.MacID=#ToolSummary.MachineID
 
         SELECT * FROM #ToolSummary ORDER BY MacLEDRed DESC,MacLEDYellow DESC,TechRequired desc,MacLEDGreen desc,DurationMins
-
         -- SELECT * FROM #ToolSummary ORDER BY DurationMins
         -- SELECT * FROM #ToolInfo ORDER BY DurationMins
 
@@ -298,7 +298,8 @@ def load_data(limit: int = 1000):
                     'LoadPeak_Warn_L':False,
                     'LoadPeak_Alm_R':False,
                     'LoadPeak_Warn_R':False,
-                    'MacStopMins':'0'}
+                    'MacStopMins':'0',
+                    'MacErrorType':'1'}
         df = pd.DataFrame(data_demo)
 
     return df
@@ -848,7 +849,6 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         '''
         df = pd.read_sql(query, conn)
         conn.close()
-        
     else:
         data_demo = {'Location': ['FMC9','FMC9','FMC9'],
                     'Turret': ['RIGHT','RIGHT','RIGHT'],

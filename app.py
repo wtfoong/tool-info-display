@@ -54,8 +54,8 @@ def get_KPI_Data_Cache(MachineName):
     return df_KPI_Data
 
 @st.cache_data(ttl= INSPECTION_DATA_CACHE)
-def get_Current_Tool_Offset_History(MachineName, Position,StartDate, EndDate):
-    df_Offet_Data = get_questdb_offset_history(MachineName, Position,StartDate, EndDate)
+def get_Current_Tool_Offset_History(MachineName, Position,StartDate, EndDate,ToolNo):
+    df_Offet_Data = get_questdb_offset_history(MachineName, Position,StartDate, EndDate, ToolNo)
     return df_Offet_Data
 
 def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDate):
@@ -152,8 +152,12 @@ if 'clicked_NormalDistribution' not in st.session_state:
 # ---- Information Display ----
 
 # Read the image file and encode it to base64
-with open("plandwt.png", "rb") as image_file:
-    encoded_string = base64.b64encode(image_file.read()).decode()
+with open("images/robot-arm_5062552.png", "rb") as image_file:
+    robotArmBase64 = base64.b64encode(image_file.read()).decode()
+    
+# Read the image file and encode it to base64
+with open("images/milling-machine.png", "rb") as image_file:
+    machineBase64 = base64.b64encode(image_file.read()).decode()
 
 @st.fragment(run_every=str(PAGE_REFRESH)+"s")
 def ShowTimerInfo():
@@ -179,10 +183,10 @@ def ShowTimerInfo():
         with col2:
             # Header row
             header_cols = st.columns([1,1,1, 1,1,1, 1, 1,1,1])
-            header_titles = ['Machine','Tech Call','Status','Count Down','Change Time','Tool Change', 'Tool Detail', 'History', 'Insp Detail','KPI']
+            header_titles = ['Machine','Tech Call (min)','Status','Cnt Down(min)','Change Time','Tool Change', 'Tool Detail', 'History', 'Insp Detail','KPI']
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
-                    f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.25vw; font-weight: bold;'>{title}</div>",
+                    f"<div style='text-align: center; border-bottom: 2px solid white; font-size: 1.1vw; font-weight: bold;'>{title}</div>",
                     unsafe_allow_html=True
                 )
 
@@ -203,23 +207,31 @@ def ShowTimerInfo():
                     
 
                 with colTechCall:
-
-
                     if row['TechRequired']:
-                        st.markdown(f"""
-                                <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
-                                    <strong>
-                                        <span>
-                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
-                                            {row['TechRequestMin']}
-                                        </span>
-                                    </strong></div>""", unsafe_allow_html=True)
+                        if row['MacErrorType'] == 2:
+                            st.markdown(f"""
+                                    <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
+                                        <strong>
+                                            <span>
+                                                <img src='data:image/png;base64,{robotArmBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
+                                                {row['TechRequestMin']}
+                                            </span>
+                                        </strong></div>""", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                                    <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
+                                        <strong>
+                                            <span>
+                                                <img src='data:image/png;base64,{machineBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
+                                                {row['TechRequestMin']}
+                                            </span>
+                                        </strong></div>""", unsafe_allow_html=True)
                     else:
                         st.markdown(f"""
                                 <div class='circle-container' style='font-size: 1.99vw;'>
                                     <strong>
                                         <span style='color: gray; opacity: 0.2;'>
-                                            <img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']}
+                                            <img src='data:image/png;base64,{machineBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']}
                                         </span>
                                     </strong></div>""", unsafe_allow_html=True)                                                     
                 with colMacStatus:
@@ -350,10 +362,16 @@ def ShowTimerInfo():
                                 color: {color};
                                 border: 1px solid #000;
                             }}
+                            
+                            button div[data-testid="stMarkdownContainer"] p {{
+                                        font-size: 1.1vw !important;
+                                        margin: 0;
+                                    }}
+
                             """,
                     ):
                         # Store selected materialcode for plotting at bottom section
-                        if st.button(f"Ppk = {LowestPpk} 📈", key=f"btn_{row['MachineID']}", use_container_width=True,type=buttonType):
+                        if st.button(f"Ppk = {LowestPpk}", key=f"btn_{row['MachineID']}", use_container_width=True,type=buttonType):
                             # #toggle off
                             # if st.session_state.clicked_materialcode == row['MaterialCode']:
                             #     st.session_state.clicked_materialcode = None # clear session state
@@ -902,7 +920,7 @@ GetLowestCPK()
 ShowTimerInfo()
 
 with st.container():
-        col1, col2, col3 = st.columns([1,30,1])
+        col1, col2, col3 = st.columns([1,70,1])
 
         with col2:
             RedColorUI = GetTowerLightUI('red')
@@ -912,9 +930,9 @@ with st.container():
             GreenColorUI = GetTowerLightUI('#00FF00')
             GreyColorUI = GetTowerLightUI('#373737')
 
-            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.5rem;'><div class='legendDiv'>{RedColorUI} <span>Alarm/Stop</span></div> |<div class='legendDiv'>{YellowColorUI} <span>Waiting</span></div> |<div class='legendDiv'>{GreenColorUI} <span>Running</span></div> |<div class='legendDiv'>{GreyColorUI} <span>Machine Off</span></div> |  <div class='legendDiv'> <span><img src='data:image/png;base64,{encoded_string}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Technician Call</span></div> | <div class='legendDiv'><span>Technician Call & Count Down: mins</span></div> </div>",
+            st.markdown( f"<div class='circle-container' style='text-align: center; border-bottom: 2px solid white; font-size: 1.5rem;'><div class='legendDiv'>{RedColorUI} <span>Alarm/Stop</span></div> |<div class='legendDiv'>{YellowColorUI} <span>Waiting</span></div> |<div class='legendDiv'>{GreenColorUI} <span>Running</span></div> |<div class='legendDiv'>{GreyColorUI} <span>Machine Off</span></div> |  <div class='legendDiv'> <span><img src='data:image/png;base64,{machineBase64}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Machine Error</span></div> | <div class='legendDiv'> <span><img src='data:image/png;base64,{robotArmBase64}' alt='icon' style='height: 2.5em; vertical-align: middle;'/> </span> <span>Automation Error</span></div> | <div class='legendDiv'><span>Technician Call & Count Down: mins</span></div> </div>",
                     unsafe_allow_html=True)
                 
-            st.markdown('---')
+            #st.markdown('---')
 
 # Tooling countdown times
