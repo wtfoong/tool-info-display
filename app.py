@@ -229,6 +229,7 @@ def ShowTimerInfo():
                     else:
                         st.markdown(f"""
                                 <div class='circle-container' style='font-size: 1.99vw;'>
+
                                     <strong>
                                         <span style='color: gray; opacity: 0.2;'>
                                             <img src='data:image/png;base64,{machineBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']}
