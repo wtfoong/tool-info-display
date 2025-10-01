@@ -400,7 +400,6 @@ def plot_KPI_Graph(df, locationName):
     if df.empty:
         print(f"No data available to plot KPI Graph for {locationName}")
         return None
-    
     fig = go.Figure()
     df = df[['Year', 'Month', 'AvgCnt', 'ToolingStation', 'ToolingMainCategory','ToolingSubCategory','mmToolID']].copy()
 
@@ -412,7 +411,6 @@ def plot_KPI_Graph(df, locationName):
 
     # Pivot the data for plotting
     pivot_df = df.pivot_table(index='ToolSide', columns='YearMonth', values='AvgCnt')
-    
 
     # First non-null value per ToolSide (earliest valid month)
     baseline = pivot_df.bfill(axis=1).iloc[:, 0]
@@ -605,14 +603,15 @@ def plot_OffSet_History_Graph(df,selectedStation,selectedAxis,MachineName):
             ToolOffsetDF = get_questdb_offset_history(MachineName=row.MachineID,Position=row.Turret,StartDate=row.StartDate,EndDate=row.CompletedDate,ToolNo=int(selectedStation))
             GroupedData = ToolOffsetDF.groupby(f'T{selectedStation:02}_Bal')[[columnName]].max().reset_index()
             GroupedData = GroupedData.sort_values(by=[f'T{selectedStation:02}_Bal'], ascending=[False]).reset_index(drop=True)
+            if GroupedData.empty:
+                continue
             GroupedData['Count'] = range(1, len(GroupedData) + 1)
             GroupedData = GroupedData.iloc[65:]
             firstRecord = GroupedData[columnName].iloc[0]
             GroupedData[ChangeOffsetColumnName] = GroupedData[columnName] - firstRecord
             CurrentToolAllData = pd.concat([CurrentToolAllData, GroupedData], ignore_index=True)
-            
-    
-    
+        if CurrentToolAllData.empty:
+            continue
         
         hovertext=[
             f'{CurrentToolDf.iloc[0]["Turret"]} - {selectedStation} offset {selectedAxis}: {tool} - x: {x_val}, y: {y_val:.4f}'
