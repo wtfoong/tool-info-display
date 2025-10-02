@@ -117,8 +117,6 @@ st.markdown(
 )
 
 
-
-
 # ---- Initialize state ----
 
 # Session_state (Note: this will not persist if browser tab refresh)
@@ -328,6 +326,7 @@ def ShowTimerInfo():
                         st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                         st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                         st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                        st.rerun()
 
                 with col_history:
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)  # Top spacer
@@ -345,6 +344,7 @@ def ShowTimerInfo():
                         st.session_state.clicked_materialdesc = None  # 👈 Reset material description
                         st.session_state.clicked_location = None # 👈 force close the clicked_location button
                         st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                        st.rerun()
             
                 with col_button:
                     
@@ -385,6 +385,7 @@ def ShowTimerInfo():
                             st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                             st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                             st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                            st.rerun()
                             
                 with col_kpi:
                     st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
@@ -397,6 +398,7 @@ def ShowTimerInfo():
                         st.session_state.clicked_location = None # 👈 force close the clicked_location button
                         st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                         st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
+                        st.rerun()
                             
 
     # Placeholder for dynamic content
@@ -528,143 +530,167 @@ def ShowTimerInfo():
                 
                 st.markdown('---')
 
-    # ---- Bottom Section: Show IMR Chart for clicked_materialcode ----
-    if st.session_state.clicked_materialcode:
-        with placeholder.container():
-            col1, col2, col3 = st.columns([1,30,1])
+   
+def GetTowerLightUI(color):
+    colorUI = f"""
+                            <span class="circle-button" style=" background: {color};"></span>
+                        """
+    return colorUI
 
-            with col2:
-                def clear_selection_clicked_materialcode():
-                    st.session_state.clicked_materialcode = None
-                    placeholder.empty()
+@st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
+def GetLowestCPK():
+    df_tool_data = read_csv_data("LowestCPK.csv")
+    filtered_df = df_tool_data.copy()
+    for index, row in filtered_df.iterrows():
+        MachineID = row['MachineID']
+        if f'CurrentMachineMaterial_{MachineID}_LowestPpk' not in st.session_state:
+            st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = None
+        st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = (
+            None if pd.isna(row['Value']) else row['Value']
+        )
+
+
+GetLowestCPK()      
+ShowTimerInfo()
+
+ # Placeholder for dynamic content
+placeholder = st.empty()
+
+if st.session_state.clicked_materialcode:
+    with placeholder.container():
+        print(st.session_state.clicked_materialcode)
+        col1, col2, col3 = st.columns([1,30,1])
+
+        with col2:
+            def clear_selection_clicked_materialcode():
+                st.session_state.clicked_materialcode = None
+                placeholder.empty()
+
+            
+            st.markdown('---')
+            st.markdown(f"### 🔍 Loading Inspection Details (CTQ & CTP) For {st.session_state.clicked_Common_Location} ...")
+
+            materialcode = st.session_state.clicked_materialcode
+            materialdesc = st.session_state.clicked_materialdesc
+            specnoList = get_CTQ_SpecNo_cached(materialcode)
+            st.button("❌ Close",key = f'close_{st.session_state.clicked_materialcode}', on_click=clear_selection_clicked_materialcode)
+            for specno in specnoList['BalloonNo'].unique():
+                df_inspection_data = get_inspection_data_cached(materialcode, specno)
+
+                if not df_inspection_data.empty:
+                    # Calculate ppk
+                    df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
+    
+                    df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
+
+                    ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
+
+                    st.info(f"#### Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
+                    title =f"SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}"
+                    fig = plotIMRByPlotly(df_inspection_data,df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0],title = title) 
+                    #st.pyplot(fig)
+                    st.plotly_chart(fig)
+                else:
+                    st.warning(f"No inspection data available for `{st.session_state.clicked_materialcode}`.")
+
+            
+            st.markdown('---')
+
+ # ---- Bottom Section: Show History data for clicked_History ----
+if st.session_state.clicked_location_History:
+    _, df_tool_data_all, _ = load_data_cached()
+    with placeholder.container():
+        col1, col2, col3 = st.columns([1,30,1])
+
+        with col2:
+            def clear_selection_clicked_location():
+                st.session_state.clicked_location_History = None
+                placeholder.empty()
+
+            
+            st.markdown('---')
+            st.button("❌ Close",key = f'close_{st.session_state.clicked_location_History}' , on_click=clear_selection_clicked_location)
+            st.markdown(f"### 📋 History Tool Change for: {st.session_state.clicked_location_History}")
+            cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
+            df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location_History]
+            df = df[cols].reset_index(drop=True)
+
+            ColOptionTurret, ColOptionStation, ColStartDatePicker, ColEndDatePicker,ColSearchButton,ColNormalDistribution = st.columns([1,1,1,1,1,1])
+            OptionTurret= ''
+            OptionStation = ''
+            StartDate = None
+            EndDate = None
+            with ColOptionTurret:
+                OptionTurret = st.selectbox("Turret Position",
+                        options=sorted(df['Turret'].unique()),
+                        index=None,
+                        placeholder="Select Turret Position...",
+                    )
+            with ColOptionStation:
+                if OptionTurret:
+                    # Filter tools based on selected turret
+                    filtered_tools = sorted(df[df['Turret'] == OptionTurret]['Tool'].unique())
+                    OptionStation = st.selectbox(
+                        "Station",
+                        options=filtered_tools,
+                        index=None,
+                        placeholder="Select Station...",
+                        key="station"
+                    )
+                else:
+                    st.selectbox(
+                        "Station",
+                        options=[''],
+                        index=None,
+                        placeholder="Select Turret first...",
+                        disabled=True,
+                        key="station_disabled"
+                    )
 
                 
-                st.markdown('---')
-                st.markdown(f"### 🔍 Loading Inspection Details (CTQ & CTP) For {st.session_state.clicked_Common_Location} ...")
-
-                materialcode = st.session_state.clicked_materialcode
-                materialdesc = st.session_state.clicked_materialdesc
-                specnoList = get_CTQ_SpecNo_cached(materialcode)
-                st.button("❌ Close",key = f'close_{st.session_state.clicked_materialcode}', on_click=clear_selection_clicked_materialcode)
-                for specno in specnoList['BalloonNo'].unique():
-                    df_inspection_data = get_inspection_data_cached(materialcode, specno)
-
-                    if not df_inspection_data.empty:
-                        # Calculate ppk
-                        df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
-        
-                        df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
-
-                        ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
-
-                        st.info(f"#### Showing details for: `{st.session_state.clicked_materialcode} | {materialdesc}`")
-                        title =f"SpecNo:{specno}| {df_inspection_data['Description'].iloc[0]} | Ppk = {ppk}"
-                        fig = plotIMRByPlotly(df_inspection_data,df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0],title = title) 
-                        #st.pyplot(fig)
-                        st.plotly_chart(fig)
-                    else:
-                        st.warning(f"No inspection data available for `{st.session_state.clicked_materialcode}`.")
-
+            with ColStartDatePicker:
+                StartDate = st.date_input("Start Date", value=None, min_value=None, max_value=date.today(), key="start_date")
                 
-                st.markdown('---')
-
-    # ---- Bottom Section: Show History data for clicked_History ----
-    if st.session_state.clicked_location_History:
-        with placeholder.container():
-            col1, col2, col3 = st.columns([1,30,1])
-
-            with col2:
-                def clear_selection_clicked_location():
-                    st.session_state.clicked_location_History = None
-                    placeholder.empty()
-
-                
-                st.markdown('---')
-                st.button("❌ Close",key = f'close_{st.session_state.clicked_location_History}' , on_click=clear_selection_clicked_location)
-                st.markdown(f"### 📋 History Tool Change for: {st.session_state.clicked_location_History}")
-                
-                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm']
-                df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location_History]
-                df = df[cols].reset_index(drop=True)
-
-                ColOptionTurret, ColOptionStation, ColStartDatePicker, ColEndDatePicker,ColSearchButton,ColNormalDistribution = st.columns([1,1,1,1,1,1])
-                OptionTurret= ''
-                OptionStation = ''
-                StartDate = None
-                EndDate = None
-                with ColOptionTurret:
-                    OptionTurret = st.selectbox("Turret Position",
-                            options=df['Turret'].unique(),
-                            index=None,
-                            placeholder="Select Turret Position...",
-                        )
-                with ColOptionStation:
-                    if OptionTurret:
-                        # Filter tools based on selected turret
-                        filtered_tools = sorted(df[df['Turret'] == OptionTurret]['Tool'].unique())
-                        OptionStation = st.selectbox(
-                            "Station",
-                            options=filtered_tools,
-                            index=None,
-                            placeholder="Select Station...",
-                            key="station"
-                        )
-                    else:
-                        st.selectbox(
-                            "Station",
-                            options=[''],
-                            index=None,
-                            placeholder="Select Turret first...",
-                            disabled=True,
-                            key="station_disabled"
-                        )
-
-                    
-                with ColStartDatePicker:
-                    StartDate = st.date_input("Start Date", value=None, min_value=None, max_value=date.today(), key="start_date")
-                    
-                with ColEndDatePicker:
-                    EndDate = st.date_input("End Date", value=None, min_value=None, max_value=date.today(), key="end_date")
-                
-                with ColSearchButton:
-                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
-                    if st.button("Search", use_container_width=True):
-                        #all selection need to be made else show error
-                        if not OptionTurret or not OptionStation or not StartDate or not EndDate:
-                            st.error("Please select Turret, Station and Date Range to search.")
-                            st.session_state.clicked_search_History = None
-                        # Check if Start Date is before or equal to End Date
-                        elif StartDate > EndDate:
-                            st.error("Start Date must be earlier than or equal to End Date.")
-                            st.session_state.clicked_search_History = None
-                        else:
-                            st.session_state.clicked_search_History = st.session_state.clicked_machineID_History
-                            st.session_state.clicked_NormalDistribution = None
-                            
-                with ColNormalDistribution:
-                    st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
-                    if st.button("Tool Analysis", use_container_width=True):
-                        #all selection need to be made else show error
-                        if not OptionTurret or not OptionStation or not StartDate or not EndDate:
-                            st.error("Please select Turret, Station and Date Range to search.")
-                            st.session_state.clicked_NormalDistribution = None
-                        # Check if Start Date is before or equal to End Date
-                        elif StartDate > EndDate:
-                            st.error("Start Date must be earlier than or equal to End Date.")
-                            st.session_state.clicked_NormalDistribution = None
-                        else:
-                            st.session_state.clicked_NormalDistribution = st.session_state.clicked_machineID_History
-                            st.session_state.clicked_search_History = None
-                            
-                if st.session_state.clicked_search_History:
+            with ColEndDatePicker:
+                EndDate = st.date_input("End Date", value=None, min_value=None, max_value=date.today(), key="end_date")
+            
+            with ColSearchButton:
+                st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
+                if st.button("Search", use_container_width=True):
+                    #all selection need to be made else show error
                     if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                        st.error("Please select Turret, Station and Date Range to search.")
                         st.session_state.clicked_search_History = None
-                        return
                     # Check if Start Date is before or equal to End Date
                     elif StartDate > EndDate:
                         st.error("Start Date must be earlier than or equal to End Date.")
-                        return
-                    
+                        st.session_state.clicked_search_History = None
+                    else:
+                        st.session_state.clicked_search_History = st.session_state.clicked_machineID_History
+                        st.session_state.clicked_NormalDistribution = None
+                        
+            with ColNormalDistribution:
+                st.markdown(f"""<div style='height:25px;'></div>""", unsafe_allow_html=True)
+                if st.button("Tool Analysis", use_container_width=True):
+                    #all selection need to be made else show error
+                    if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                        st.error("Please select Turret, Station and Date Range to search.")
+                        st.session_state.clicked_NormalDistribution = None
+                    # Check if Start Date is before or equal to End Date
+                    elif StartDate > EndDate:
+                        st.error("Start Date must be earlier than or equal to End Date.")
+                        st.session_state.clicked_NormalDistribution = None
+                    else:
+                        st.session_state.clicked_NormalDistribution = st.session_state.clicked_machineID_History
+                        st.session_state.clicked_search_History = None
+                        
+            if st.session_state.clicked_search_History:
+                if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                    st.session_state.clicked_search_History = None
+                # Check if Start Date is before or equal to End Date
+                elif StartDate > EndDate:
+                    st.error("Start Date must be earlier than or equal to End Date.")
+                else:
                     df_history = get_History_Tool_Data(
                         MachineName=st.session_state.clicked_search_History,
                         Position=OptionTurret, 
@@ -763,16 +789,15 @@ def ShowTimerInfo():
 
                                 #st.pyplot(fig)
                                 st.plotly_chart(fig)
+            
+            if st.session_state.clicked_NormalDistribution:
+                if not OptionTurret or not OptionStation or not StartDate or not EndDate:
+                    st.session_state.clicked_NormalDistribution = None
+                # Check if Start Date is before or equal to End Date
+                elif StartDate > EndDate:
+                    st.error("Start Date must be earlier than or equal to End Date.")
+                else:
                 
-                if st.session_state.clicked_NormalDistribution:
-                    if not OptionTurret or not OptionStation or not StartDate or not EndDate:
-                        st.session_state.clicked_NormalDistribution = None
-                        return
-                    # Check if Start Date is before or equal to End Date
-                    elif StartDate > EndDate:
-                        st.error("Start Date must be earlier than or equal to End Date.")
-                        return
-                    
                     df_history = get_History_Tool_Data(
                         MachineName=st.session_state.clicked_NormalDistribution,
                         Position=OptionTurret, 
@@ -817,107 +842,57 @@ def ShowTimerInfo():
                             #fig = plotIMRByPlotly(table,table['USL'].iloc[0],table['LSL'].iloc[0],title = title) 
                             #st.pyplot(fig)
                             #st.plotly_chart(fig)
+            st.markdown('---')
 
+# ---- Bottom Section: Show KPI data for clicked_KPI ----
+if st.session_state.clicked_KPI:
+    with st.container():
+        col1, col2, col3 = st.columns([1,30,1])
 
-                st.markdown('---')
+        with col2:
+            def clear_selection_clicked_location():
+                st.session_state.clicked_KPI = None
+                placeholder.empty()
 
-    # ---- Bottom Section: Show KPI data for clicked_KPI ----
-    if st.session_state.clicked_KPI:
-        with st.container():
-            col1, col2, col3 = st.columns([1,30,1])
+            st.markdown('---')
+            st.button("❌ Close",key = f'close_{st.session_state.clicked_KPI}' , on_click=clear_selection_clicked_location)
+            st.markdown(f"### 📋 KPI (Key Performance Indicator) for: {st.session_state.clicked_Common_Location}")
 
-            with col2:
-                def clear_selection_clicked_location():
-                    st.session_state.clicked_KPI = None
-                    placeholder.empty()
+            
+            KPIDf = get_KPI_Data_Cache(
+                MachineName=st.session_state.clicked_KPI
+            )
 
-                st.markdown('---')
-                st.button("❌ Close",key = f'close_{st.session_state.clicked_KPI}' , on_click=clear_selection_clicked_location)
-                st.markdown(f"### 📋 KPI (Key Performance Indicator) for: {st.session_state.clicked_Common_Location}")
-
+            if KPIDf.empty:
+                st.error(f"No data available for machine {st.session_state.clicked_KPI}")
+            else:
                 
-                KPIDf = get_KPI_Data_Cache(
-                    MachineName=st.session_state.clicked_KPI
+                df_low = KPIDf[KPIDf['PresetCounter'] < 1000]
+                df_mid = KPIDf[(KPIDf['PresetCounter'] >= 1000) & (KPIDf['PresetCounter'] < 3000)]
+                df_high = KPIDf[KPIDf['PresetCounter'] >= 3000]
+
+                fig_low = plot_KPI_Graph(
+                    df_low,
+                    st.session_state.clicked_Common_Location
                 )
-
-                if KPIDf.empty:
-                    st.error(f"No data available for machine {st.session_state.clicked_KPI}")
-                else:
+                fig_medium = plot_KPI_Graph(
+                    df_mid,
+                    st.session_state.clicked_Common_Location
+                )
+                fig_high = plot_KPI_Graph(
+                    df_high,
+                    st.session_state.clicked_Common_Location
+                )
+                if fig_low:
+                    st.plotly_chart(fig_low)
+                if fig_medium:
+                    st.plotly_chart(fig_medium)
+                if fig_high:
+                    st.plotly_chart(fig_high)
                     
-                    df_low = KPIDf[KPIDf['PresetCounter'] < 1000]
-                    df_mid = KPIDf[(KPIDf['PresetCounter'] >= 1000) & (KPIDf['PresetCounter'] < 3000)]
-                    df_high = KPIDf[KPIDf['PresetCounter'] >= 3000]
-
-                    fig_low = plot_KPI_Graph(
-                        df_low,
-                        st.session_state.clicked_Common_Location
-                    )
-                    fig_medium = plot_KPI_Graph(
-                        df_mid,
-                        st.session_state.clicked_Common_Location
-                    )
-                    fig_high = plot_KPI_Graph(
-                        df_high,
-                        st.session_state.clicked_Common_Location
-                    )
-                    if fig_low:
-                        st.plotly_chart(fig_low)
-                    if fig_medium:
-                        st.plotly_chart(fig_medium)
-                    if fig_high:
-                        st.plotly_chart(fig_high)
-                        
-                st.markdown('---')
+            st.markdown('---')
 
 
-def GetTowerLightUI(color):
-    colorUI = f"""
-                            <span class="circle-button" style=" background: {color};"></span>
-                        """
-    return colorUI
-
-# @st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
-# def CalculateCPK():
-#     df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
-#     filtered_df = df_tool_data.copy()
-#     for index, row in filtered_df.iterrows():
-#         materialcode = row['MaterialCode']
-#         if f'CurrentMachineMaterial_{materialcode}_LowestPpk' not in st.session_state:
-#             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = None
-        
-#         specnoList = get_CTQ_SpecNo_cached(materialcode)
-#         ppkList = []
-#         for specno in specnoList['BalloonNo'].unique():
-#             df_inspection_data = get_inspection_data_cached(materialcode, specno)
-#             if not df_inspection_data.empty:
-#                 # Calculate ppk
-#                 df_inspection_data['LSL'] = pd.to_numeric(df_inspection_data['LSL'], errors='coerce')
-
-#                 df_inspection_data['USL'] = pd.to_numeric(df_inspection_data['USL'], errors='coerce')
-
-#                 ppk = calculate_ppk(df_inspection_data['MeasVal'],df_inspection_data['USL'].iloc[0],df_inspection_data['LSL'].iloc[0])
-#                 ppkList.append(ppk)
-#         if ppkList:
-#             min_ppk = min(ppkList)
-#             st.session_state[f'CurrentMachineMaterial_{materialcode}_LowestPpk'] = min_ppk
-
-# CalculateCPK()   
-
-@st.fragment(run_every=str(INSPECTION_DATA_CACHE)+"s")
-def GetLowestCPK():
-    df_tool_data = read_csv_data("LowestCPK.csv")
-    filtered_df = df_tool_data.copy()
-    for index, row in filtered_df.iterrows():
-        MachineID = row['MachineID']
-        if f'CurrentMachineMaterial_{MachineID}_LowestPpk' not in st.session_state:
-            st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = None
-        st.session_state[f'CurrentMachineMaterial_{MachineID}_LowestPpk'] = (
-            None if pd.isna(row['Value']) else row['Value']
-        )
-
-
-GetLowestCPK()      
-ShowTimerInfo()
 
 with st.container():
         col1, col2, col3 = st.columns([1,70,1])
