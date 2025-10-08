@@ -494,7 +494,9 @@ def ShowTimerInfo():
                                 loadXDf,
                                 selectedColumn='Load_X',
                                 TotalCounter=row['TotalCounter'],
-                                PresetCounter=row['PresetCounter']
+                                PresetCounter=row['PresetCounter'],
+                                ToolingStation= row['Tool'],
+                                IsHistory=False,
                             )
 
                             #st.pyplot(fig)
@@ -519,7 +521,9 @@ def ShowTimerInfo():
                                 loadZDf,
                                 selectedColumn='Load_Z',
                                 TotalCounter=row['TotalCounter'],
-                                PresetCounter=row['PresetCounter']
+                                PresetCounter=row['PresetCounter'],
+                                ToolingStation= row['Tool'],
+                                IsHistory=False,
                             )
 
                             #st.pyplot(fig)
@@ -757,7 +761,9 @@ if st.session_state.clicked_location_History:
                                     loadXDf,
                                     selectedColumn='Load_X',
                                     TotalCounter=row['TotalCounter'],
-                                    PresetCounter=row['PresetCounter']
+                                    PresetCounter=row['PresetCounter'],
+                                    ToolingStation= row['Tool'],
+                                    IsHistory=True,
                                 )
 
                                 #st.pyplot(fig)
@@ -784,7 +790,9 @@ if st.session_state.clicked_location_History:
                                     loadZDf,
                                     selectedColumn='Load_Z',
                                     TotalCounter=row['TotalCounter'],
-                                    PresetCounter=row['PresetCounter']
+                                    PresetCounter=row['PresetCounter'],
+                                    ToolingStation= row['Tool'],
+                                    IsHistory=True,
                                 )
 
                                 #st.pyplot(fig)
@@ -814,7 +822,9 @@ if st.session_state.clicked_location_History:
                     if df_history.empty:
                                 st.error(f"No data available for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}.")
                     else:
-                        fig = plotNormalDistributionPlotly(df_history,title=f"Normal Distribution for {st.session_state.clicked_location_History}-{OptionTurret} on {OptionStation} from {StartDate} to {EndDate}")
+                        Process = df_history.iloc[0]['Process']
+                        mmToolID = df_history.iloc[0]['mmToolID']
+                        fig = plotNormalDistributionPlotly(df_history,title=f"Normal Distribution for {st.session_state.clicked_location_History}-{OptionTurret} on station {OptionStation}:  {Process}-{mmToolID} from {StartDate} to {EndDate}")
                         st.plotly_chart(fig)
                         offsetX_fig = plot_OffSet_History_Graph(df=df_history,selectedStation=OptionStation,selectedAxis='X',MachineName=st.session_state.clicked_NormalDistribution)
                         offsetZ_fig = plot_OffSet_History_Graph(df=df_history,selectedStation=OptionStation,selectedAxis='Z',MachineName=st.session_state.clicked_NormalDistribution)
