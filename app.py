@@ -494,7 +494,9 @@ def ShowTimerInfo():
                                 loadXDf,
                                 selectedColumn='Load_X',
                                 TotalCounter=row['TotalCounter'],
-                                PresetCounter=row['PresetCounter']
+                                PresetCounter=row['PresetCounter'],
+                                ToolingStation= row['Tool'],
+                                IsHistory=False,
                             )
 
                             #st.pyplot(fig)
@@ -519,7 +521,9 @@ def ShowTimerInfo():
                                 loadZDf,
                                 selectedColumn='Load_Z',
                                 TotalCounter=row['TotalCounter'],
-                                PresetCounter=row['PresetCounter']
+                                PresetCounter=row['PresetCounter'],
+                                ToolingStation= row['Tool'],
+                                IsHistory=False,
                             )
 
                             #st.pyplot(fig)
@@ -757,7 +761,9 @@ if st.session_state.clicked_location_History:
                                     loadXDf,
                                     selectedColumn='Load_X',
                                     TotalCounter=row['TotalCounter'],
-                                    PresetCounter=row['PresetCounter']
+                                    PresetCounter=row['PresetCounter'],
+                                    ToolingStation= row['Tool'],
+                                    IsHistory=True,
                                 )
 
                                 #st.pyplot(fig)
@@ -784,7 +790,9 @@ if st.session_state.clicked_location_History:
                                     loadZDf,
                                     selectedColumn='Load_Z',
                                     TotalCounter=row['TotalCounter'],
-                                    PresetCounter=row['PresetCounter']
+                                    PresetCounter=row['PresetCounter'],
+                                    ToolingStation= row['Tool'],
+                                    IsHistory=True,
                                 )
 
                                 #st.pyplot(fig)

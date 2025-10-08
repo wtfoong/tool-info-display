@@ -702,33 +702,45 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
         if EndDate is None:
             raise ValueError("EndDate must be provided when historyFlag is True")
         OT_DataLake_df = get_OT_Datalake_data_history(MachineName, Position, ToolingStation,StartDate,EndDate)
-    else:
-        OT_DataLake_df = get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate)
+    # else:
+    #     OT_DataLake_df = get_OT_Datalake_data(MachineName, Position, ToolingStation,StartDate)
     if historyFlag:
         Questdb_df = get_questdb_data_history(Position,StartDate, EndDate,ToolingStation, MachineName)
     else:
         Questdb_df = get_questdb_data(Position,StartDate, ToolingStation, MachineName)
-    if OT_DataLake_df.empty and Questdb_df.empty:
-        return pd.DataFrame()
 
-    Questdb_df.rename(columns={'ToolNo': 'ToolingStation'}, inplace=True)
+    if historyFlag:
+        if OT_DataLake_df.empty and Questdb_df.empty:
+            return pd.DataFrame()
+        Questdb_df.rename(columns={'ToolNo': 'ToolingStation'}, inplace=True)
 
-    Questdb_df['ToolingStation'] = Questdb_df['ToolingStation'].apply(lambda x: int(f"{x}0{x}"))
-    Questdb_df['ToolingStationSeqNum'] = Questdb_df['ToolingStation'].astype(str) +'_'+ Questdb_df['SeqNo'].astype(str)
-    
-    Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
-    OT_DataLake_df['TIMESTAMP'] = pd.to_datetime(OT_DataLake_df['TIMESTAMP'])
-    CurrentToolCountNQuestdbdf =pd.merge_asof(Questdb_df.sort_values('Timestamp'), OT_DataLake_df.sort_values('TIMESTAMP'), left_on='Timestamp', right_on='TIMESTAMP', direction='backward')
-    CurrentToolCountNQuestdbdf['Timestamp'] = pd.to_datetime(CurrentToolCountNQuestdbdf['Timestamp'], format='%d/%m/%Y %H:%M:%S.%f')
+        Questdb_df['ToolingStation'] = Questdb_df['ToolingStation'].apply(lambda x: int(f"{x}0{x}"))
+        Questdb_df['ToolingStationSeqNum'] = Questdb_df['ToolingStation'].astype(str) +'_'+ Questdb_df['SeqNo'].astype(str)
+        
+        Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
+        OT_DataLake_df['TIMESTAMP'] = pd.to_datetime(OT_DataLake_df['TIMESTAMP'])
+        CurrentToolCountNQuestdbdf =pd.merge_asof(Questdb_df.sort_values('Timestamp'), OT_DataLake_df.sort_values('TIMESTAMP'), left_on='Timestamp', right_on='TIMESTAMP', direction='backward')
+        CurrentToolCountNQuestdbdf['Timestamp'] = pd.to_datetime(CurrentToolCountNQuestdbdf['Timestamp'], format='%d/%m/%Y %H:%M:%S.%f')
 
-    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna(subset=['Duplicate'])
+        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna(subset=['Duplicate'])
 
-    CurrentToolCountNQuestdbdf['VALUE'] =  CurrentToolCountNQuestdbdf['VALUE'].astype(int)
-    
-    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
-    
-    CurrentToolCountNQuestdbdf['ToolingStation'] = CurrentToolCountNQuestdbdf['ToolingStation_x']
-    CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns=['ToolingStation_x', 'ToolingStation_y'])
+        CurrentToolCountNQuestdbdf['VALUE'] =  CurrentToolCountNQuestdbdf['VALUE'].astype(int)
+        
+        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
+        
+        CurrentToolCountNQuestdbdf['ToolingStation'] = CurrentToolCountNQuestdbdf['ToolingStation_x']
+        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns=['ToolingStation_x', 'ToolingStation_y'])
+    else:
+        if Questdb_df.empty:
+            return pd.DataFrame()
+        Questdb_df.rename(columns={'ToolNo': 'ToolingStation'}, inplace=True)
+
+        Questdb_df['ToolingStation'] = Questdb_df['ToolingStation'].apply(lambda x: int(f"{x}0{x}"))
+        Questdb_df['ToolingStationSeqNum'] = Questdb_df['ToolingStation'].astype(str) +'_'+ Questdb_df['SeqNo'].astype(str)
+        
+        Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
+        CurrentToolCountNQuestdbdf = Questdb_df
+        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
     
     #filters
     #filter all data that have time diff of 5s and above with next row
@@ -757,6 +769,7 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
     #     CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['percent_diff'] <= 2]
     AlarmFilter = AlarmFilter*1.1 # add 10% buffer to alarm filter
     CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[AlarmColumn] <= AlarmFilter]
+    CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[AlarmColumn] >0]
 
 
     #CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[selectedColumn]<=CutOffValue]
