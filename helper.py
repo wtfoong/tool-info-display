@@ -606,6 +606,9 @@ def plot_OffSet_History_Graph(df,selectedStation,selectedAxis,MachineName):
             if GroupedData.empty:
                 continue
             GroupedData['Count'] = range(1, len(GroupedData) + 1)
+            if len(GroupedData)<65:
+                continue
+            
             GroupedData = GroupedData.iloc[65:]
             firstRecord = GroupedData[columnName].iloc[0]
             GroupedData[ChangeOffsetColumnName] = GroupedData[columnName] - firstRecord
