@@ -76,14 +76,23 @@ def find_usl_lsl_for_cpk(USL,LSL, target_cpk=1.0):
 
     return round(Gusl, 3), round(Glsl, 3), round(Yusl, 3), round(Ylsl, 3)
 
-def GroupDfByPiecesMade(df, IsMax=True):
-    if IsMax:
-        GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].max().reset_index()
+def GroupDfByPiecesMade(df,ToolingStation,IsHistory, IsMax=True):
+    if IsHistory:
+        if IsMax:
+            GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].max().reset_index()
+        else:
+            GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].mean().reset_index()
+        GroupCurrentToolCountNQuestdbValue = GroupCurrentToolCountNQuestdbValue.sort_values(by=['VALUE'], ascending=[False]).reset_index(drop=True)
     else:
-       GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].mean().reset_index()
+        if IsMax:
+            GroupCurrentToolCountNQuestdbValue = df.groupby([f'T{ToolingStation:02}_Bal'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl','ToolingStation']].max().reset_index()
+        else:
+            GroupCurrentToolCountNQuestdbValue = df.groupby([f'T{ToolingStation:02}_Bal'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl','ToolingStation']].mean().reset_index()
+            
+        GroupCurrentToolCountNQuestdbValue = GroupCurrentToolCountNQuestdbValue.sort_values(by=[f'T{ToolingStation:02}_Bal'], ascending=[False]).reset_index(drop=True)
         
-    GroupCurrentToolCountNQuestdbValue['ToolingStationSeqNum'] = GroupCurrentToolCountNQuestdbValue['ToolingStation'].astype(str) +'-'+ GroupCurrentToolCountNQuestdbValue['SeqNo'].astype(str)
-    GroupCurrentToolCountNQuestdbValue = GroupCurrentToolCountNQuestdbValue.sort_values(by=['VALUE'], ascending=[False]).reset_index(drop=True)
+    #GroupCurrentToolCountNQuestdbValue['ToolingStationSeqNum'] = GroupCurrentToolCountNQuestdbValue['ToolingStation'].astype(str) +'-'+ GroupCurrentToolCountNQuestdbValue['SeqNo'].astype(str)
+    
     
     GroupCurrentToolCountNQuestdbValue['Count'] = range(1, len(GroupCurrentToolCountNQuestdbValue) + 1)
 
@@ -339,9 +348,9 @@ def VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentTool
     return fig
 
 # ---- plot Selected Column by pieces made ----
-def plot_selected_columns_by_pieces_made(df, selectedColumn,TotalCounter,PresetCounter, DataToShow=200):
-    GroupCurrentToolCountNQuestdbValueMax = GroupDfByPiecesMade(df)
-    GroupCurrentToolCountNQuestdbValueMean = GroupDfByPiecesMade(df,False)
+def plot_selected_columns_by_pieces_made(df, selectedColumn,TotalCounter,PresetCounter,ToolingStation,IsHistory):
+    GroupCurrentToolCountNQuestdbValueMax = GroupDfByPiecesMade(df,ToolingStation,IsHistory)
+    GroupCurrentToolCountNQuestdbValueMean = GroupDfByPiecesMade(df,ToolingStation,IsHistory,False)
     GroupCurrentToolCountNQuestdbValueMax = GroupCurrentToolCountNQuestdbValueMax[GroupCurrentToolCountNQuestdbValueMax['Count']<=TotalCounter]
     GroupCurrentToolCountNQuestdbValueMean = GroupCurrentToolCountNQuestdbValueMean[GroupCurrentToolCountNQuestdbValueMean['Count']<=TotalCounter]
     fig = VisualiseDataByPlotly(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, PresetCounter)#VisualiseData(GroupCurrentToolCountNQuestdbValueMax,GroupCurrentToolCountNQuestdbValueMean,selectedColumn, DataToShow)
