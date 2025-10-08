@@ -1,3 +1,4 @@
+#%%
 import pyodbc
 from dotenv import load_dotenv
 import os
@@ -873,29 +874,61 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
 
     return df
 
-def get_KPI_Data(MachineName):
+# add all machne flag, add all period flag
+def get_KPI_Data(MachineName = None, All_period = False):
+    '''
+    If MachineName is None, it will return data for all machines.
+    If MachineName is provided, it will return data for the specified machine.
+
+    If All_period is True, it will return data for all periods.
+    If All_period is False, it will return data for the last 6 months.
+    '''
 
     if not DEMO_MODE:
+
+        machinename = f'''AND TN.MachineId = ?''' if MachineName is not None else ''
+        period = f'''AND FORMAT(TL.CreatedDate, 'yyyyMM') >= FORMAT(DATEADD(MONTH, -6, GETDATE()), 'yyyyMM')''' if All_period == False else ''
+
         query = f'''
-        SELECT mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.Year,TN.Month,
-        SUM(TL.TotalCounter) TotalCounter, SUM(TL.TotalCounter)/COUNT(DISTINCT ToolNoID) AvgCnt,mmTool.PresetCounter,
-        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode
+        WITH CTE_TL AS (
+
+        SELECT mmTool.ToolID AS mmToolID,mmTool.ToolingMaker,TN.MachineId
+        --,TN.Year,TN.Month,
+        ,mmTool.PresetCounter,mmTool.ProductGroup,mmTool.SAPCode
+        ,mmTool.ToolingMainCategory,mmTool.ToolingStation,mmTool.ToolingClass,mmTool.ToolingSubCategory
+        ,ToolNoID,TL.TotalCounter
+        ,MAX(TL.CreatedDate) OVER (PARTITION BY ToolNoID) AS [EOLDate]
         FROM ToolLifeHistory TL
         inner JOIN (ToolNo TN inner JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
         ON TL.ToolNoId=TN.Id
         LEFT JOIN SPLOEE.DBO.OEEDownTime DT ON TL.OEEOutputKepID = DT.ID
-        WHERE TN.MachineId = ? --AND TL.CreatedBy='OPCROUTER'
-        AND TL.CreatedDate >= '2025-05-25 00:00:00.000' 
-        AND FORMAT(TL.CreatedDate, 'yyyyMM') >= FORMAT(DATEADD(MONTH, -6, GETDATE()), 'yyyyMM')
+
+        WHERE 1=1
+        {machinename}
+        -- AND TL.CreatedBy='OPCROUTER'
+        AND TL.CreatedDate >= '2025-06-01 00:00:00.000' 
+        {period}
         -- AND ToolingMainCategory='LEFT' AND ToolingStation=303
         AND TL.CreatedDate NOT BETWEEN '2025/06/01' and '2025/06/02'
         AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
         AND TL.ToolNoId NOT IN  (5649,5671,5652,5651) -- Testing Data 
         AND TL.TotalCounter > mmTool.PresetCounter * 0.2
         AND TL.Delflag = 0
-        GROUP BY mmTool.ToolID,mmTool.ToolingMaker,TN.MachineId,TN.Year,TN.Month,mmTool.PresetCounter,
-        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode
-        ORDER BY mmTool.ToolingMainCategory,mmTool.ToolingStation,TN.Month
+
+        )
+
+        SELECT 
+        mmToolID,ToolingMaker,MachineId
+        ,PresetCounter,ProductGroup,SAPCode
+        ,ToolingMainCategory,ToolingStation,ToolingClass,ToolingSubCategory
+
+        ,YEAR([EOLDate]) AS Year, MONTH([EOLDate]) AS Month
+        ,SUM(TotalCounter) AS TotalCounter, SUM(TotalCounter)/COUNT(DISTINCT ToolNoID) AS AvgCnt
+        ,COUNT(DISTINCT ToolNoID) AS NumberofToolReplaced
+        FROM CTE_TL
+
+        GROUP BY mmToolID,ToolingMaker,MachineId,YEAR([EOLDate]),MONTH([EOLDate]),PresetCounter,
+        ToolingStation,ProductGroup,ToolingClass,ToolingMainCategory,ToolingSubCategory,SAPCode
         '''
         params = (MachineName)
         conn = get_db_connection()
@@ -942,3 +975,4 @@ def get_questdb_offset_history(MachineName, Position, StartDate, EndDate,ToolNo)
     with engine.connect() as conn:
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
+# %%
