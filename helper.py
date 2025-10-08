@@ -496,6 +496,64 @@ def plot_KPI_Graph(df, locationName):
 
     return fig
 
+def plot_overall_KPI_graph(df):
+
+    # for testing use this to get dataset
+    # df = get_KPI_Data(MachineName= None, All_period = True)
+    df = df.copy()
+
+    # Create a 'YearMonth' column
+    df['YearMonth'] = df['Year'].astype(str) + df['Month'].astype(str).str.zfill(2)
+    df['YearMonth'] = df['YearMonth'].astype(int)
+
+    # Create a unique identifier for each tool
+    df['Identifier'] = df['MachineId'] + '_' + df['ToolingMainCategory'] + '_' + df['ToolingStation'].astype(str)
+
+    # get tool life since first inception as baseline (based on first available month for each tool)
+    df = df.sort_values(by=['Identifier', 'YearMonth']).reset_index(drop=True)
+    df['baseline'] = df.groupby('Identifier')['AvgCnt'].transform('first')
+    df['baseline'] = df['baseline'].replace(0, np.nan) # avoid divide by zero later
+
+    # get change vs first value (type 1) #! no need already, use pbi coaeslece
+    df['baseline_change'] = (df['AvgCnt'] / df['baseline']) -1 # first value is zero (for visualization use, graph need to start from zero)
+
+    # get month over month change
+    df['mom_change'] = df.groupby('Identifier')['AvgCnt'].pct_change() #calculates the ratio change between the current and previous element (data must be sorted correctly first)
+
+    # get change vs first value (type 2)
+    df['mom_change_pct'] = df['mom_change'] + 1
+    df['baseline_change2'] = df.groupby('Identifier')['mom_change_pct'].cumprod()-1  # first value is null (for averaging use)
+
+    # #---- Generate full range of YearMonth with default value 0 ----#
+    # if True:
+    #     min_ym = df['YearMonth'].min()
+    #     max_ym = df['YearMonth'].max()
+
+    #     # Create a function to increment YearMonth
+    #     def next_ym(ym):
+    #         year = ym // 100
+    #         month = ym % 100
+    #         if month == 12:
+    #             return (year + 1) * 100 + 1
+    #         else:
+    #             return year * 100 + (month + 1)
+
+    #     # Generate all YearMonth values
+    #     full_range = []
+    #     ym = min_ym
+    #     while ym <= max_ym:
+    #         full_range.append(ym)
+    #         ym = next_ym(ym)
+
+    #     # Reindex DataFrame
+    #     df_full_ym = pd.DataFrame({'YearMonth': full_range})
+    #     df_full_ym['default_value'] = 0
+
+    #! output data for powerbi (temporary)
+    cols = ['Identifier', 'ToolingStation', 'ToolingMainCategory','ToolingSubCategory', 'mmToolID', 'MachineId','YearMonth','AvgCnt','baseline', 'baseline_change', 'mom_change','baseline_change2','NumberofToolReplaced','TotalCounter']
+    df_final = df[cols].copy()
+    # df_final[df_final['MachineId'].str.startswith('MS')].to_csv(r'D:\Work (Shimano)\09 SPL DT\2. DT Report\6. Data Team\AI Project\4. MS Tool Life (Smartbox)\project information\powerbi ideas\overall_kpi_data.csv', index=False)
+
 def plotNormalDistributionPlotly(df,title):
     fig = go.Figure()
     
