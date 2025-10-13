@@ -892,15 +892,14 @@ def get_KPI_Data(MachineName = None, All_period = False):
 
         WHERE 1=1
         {machinename}
-        -- AND TL.CreatedBy='OPCROUTER'
-        AND TL.CreatedDate >= '2025-06-01 00:00:00.000' 
         {period}
-        -- AND ToolingMainCategory='LEFT' AND ToolingStation=303
+        AND TL.CreatedDate >= '2025-06-01 00:00:00.000'  --AUTO CHANGE TOOL GO LIVE
         AND TL.CreatedDate NOT BETWEEN '2025/06/01' and '2025/06/02'
         AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
         AND TL.ToolNoId NOT IN  (5649,5671,5652,5651) -- Testing Data 
         AND TL.TotalCounter > mmTool.PresetCounter * 0.2
-        AND TL.Delflag = 0
+        AND TL.ToolNoId NOT IN (SELECT ToolNoId FROM ToolLifeHistory WHERE TotalCounter<0) --DROP DATA DUE TO MACHINE SIDE COUNTER RESET
+        AND ISNULL(TL.Delflag,0) = 0
 
         )
 
