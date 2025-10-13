@@ -154,7 +154,7 @@ def load_data(limit: int = 1000):
             AND TI.ToolingStation = TC.ToolStation
 
         UPDATE #ToolInfo SET Balance=0 WHERE Balance<0
-        UPDATE #ToolInfo SET DurationMins=(Balance*MesCT)/60
+        UPDATE #ToolInfo SET DurationMins=(ISNULL(Balance,0)*ISNULL(MesCT,0))/60
         ------------------------------------------- ToolLife Summary ------------------------------------
         DECLARE @RowNum INT=1
         DECLARE @TotalRow INT
@@ -378,7 +378,7 @@ def load_data_all():
             AND TI.ToolingStation = TC.ToolStation
 
         UPDATE #ToolInfo SET Balance=0 WHERE Balance<0
-        UPDATE #ToolInfo SET DurationMins=(Balance*MesCT)/60
+        UPDATE #ToolInfo SET DurationMins=(ISNULL(Balance,0)*ISNULL(MesCT,0))/60
         ------------------------------------------- ToolLife Summary ------------------------------------
         DECLARE @RowNum INT=1
         DECLARE @TotalRow INT
