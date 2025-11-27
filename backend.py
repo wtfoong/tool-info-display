@@ -542,6 +542,7 @@ def load_data_all():
             ON TLP.MachineId=#ToolInfo.MachineId 
             AND TLP.Turret=#ToolInfo.ToolingMainCategory
             AND TLP.ToolingStation=#ToolInfo.ToolingStation
+            AND TLP.IsLatestPrediction = 1
         ORDER BY Location, DurationMins
 
         DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo,#ToolSummary,#DT,#MacInfo
