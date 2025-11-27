@@ -223,8 +223,8 @@ def ShowTimerInfo():
             header_cols = st.columns([1,1,1, 1,1,1, 1, 1,1,1])
             header_titles = []
             if st.session_state.toggle_FullInfoFlag:
-                header_cols = st.columns([1,1,1, 1,1,1, 1, 1,1,1,1])
-                header_titles = ['Machine','Tech Call (min)','Status','Cnt Down(min)','Change Time','Ori Chg Time','Tool Change', 'Tool Detail', 'History', 'Ppk','KPI']
+                header_cols = st.columns([1,1,1, 1,1,1, 1, 1,1,1])
+                header_titles = ['Machine','Tech Call (min)','Status','Cnt Down(min)','Change Time','Tool Change', 'Tool Detail', 'History', 'Ppk','KPI']
                 
             else:
                 header_cols = st.columns([1,1,1, 1,1,1, 1, 1])
@@ -246,7 +246,7 @@ def ShowTimerInfo():
                 backGroundColor, blink_style = set_timer_style(row['SuggestedToolChangeTime'] if pd.notna(row['SuggestedToolChangeTime']) else row['DurationMins'])
                     
                 if st.session_state.toggle_FullInfoFlag:
-                    col_name,colTechCall,colMacStatus, col_timer,colChangeTime,colOriChangeTime,colToolChange, col_tool, col_history, col_button, col_kpi = st.columns([1,1,1, 1,1,1, 1, 1,1,1,1])  # adjust ratios as needed
+                    col_name,colTechCall,colMacStatus, col_timer,colChangeTime,colToolChange, col_tool, col_history, col_button, col_kpi = st.columns([1,1,1, 1,1,1, 1, 1,1,1])  # adjust ratios as needed
                 else:
                     col_name,colTechCall,colMacStatus, col_timer,colChangeTime,colToolChange, col_tool, col_button = st.columns([1,1,1, 1,1,1, 1,1])
 
@@ -361,11 +361,12 @@ def ShowTimerInfo():
                                     50% {{ opacity: 0; }}
                                 }}
                             </style>
-                            <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
+                            <div class='circle-container' style="color: {backGroundColor}; font-size: {1.78 if st.session_state.toggle_FullInfoFlag else 1.99 }vw; {blink_style};justify-content: space-evenly;">
                                 <span>{SuggestedToolChangeTime.strftime('%I:%M %p').lstrip('0') if pd.notna(row['SuggestedToolChangeTime']) else ToolChangeTime.strftime('%I:%M %p').lstrip('0')}</span>
                             </div>
                             """,
                             unsafe_allow_html=True,
+                            help=f"Original time: {ToolChangeTime.strftime('%I:%M %p').lstrip('0')}"if pd.notna(row['SuggestedToolChangeTime']) and st.session_state.toggle_FullInfoFlag else ""
                         )
                     
                 with colToolChange:
@@ -468,38 +469,6 @@ def ShowTimerInfo():
                             st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
                             st.rerun()
                 if st.session_state.toggle_FullInfoFlag:
-                    with colOriChangeTime:
-                        if NoToolDataFlag:
-                            st.markdown(
-                                f"""
-                                <style>
-                                    @keyframes blinker {{
-                                        50% {{ opacity: 0; }}
-                                    }}
-                                </style>
-                                <div class='circle-container' style="color: #555755; font-size: 1.99vw; justify-content: space-evenly;">
-                                    <span> N/A </span>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            currentTime = datetime.now()
-                            ToolChangeTime = currentTime + timedelta(minutes=row['DurationMins'])
-
-                            st.markdown(
-                                f"""
-                                <style>
-                                    @keyframes blinker {{
-                                        50% {{ opacity: 0; }}
-                                    }}
-                                </style>
-                                <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
-                                    <span>{ToolChangeTime.strftime('%I:%M %p').lstrip('0')}</span>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
                     with col_history:
                         st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
 
