@@ -228,7 +228,7 @@ def ShowTimerInfo():
                 
             else:
                 header_cols = st.columns([1,1,1, 1,1,1, 1, 1])
-                header_titles = ['Machine','Tech Call (min)','Status','Cnt Down(min)','Change Time','Tool Change', 'Tool Detail', 'Ppk']
+                header_titles = ['Machine','Tech Call (min)','Status','Count Down(min)','Change Time','Tool Change', 'Tool Detail', 'Ppk']
             
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
@@ -326,7 +326,7 @@ def ShowTimerInfo():
                                 }}
                             </style>
                             <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
-                                <span>{str(row['SuggestedToolChangeTime']) if pd.notna(row['SuggestedToolChangeTime']) else row['DurationMins']}{f"<sup style='font-size: 0.7em;color: #A3A8B8'>{row['AdjustTime']}</sup>" if pd.notna(row['SuggestedToolChangeTime']) else ""}</span>
+                                <span>{str(max(0,row['SuggestedToolChangeTime'])) if pd.notna(row['SuggestedToolChangeTime']) else row['DurationMins']}{f"<sup style='font-size: 0.7em;color: #A3A8B8'>{row['AdjustTime']}</sup>" if pd.notna(row['SuggestedToolChangeTime']) else ""}</span>
                             </div>
                             """,
                             unsafe_allow_html=True,
