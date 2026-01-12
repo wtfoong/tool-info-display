@@ -535,7 +535,7 @@ def load_data_all():
         Location, ToolingMainCategory AS [Turret], #ToolInfo.ToolingStation AS [Tool], ToolingSubCategory AS [Process], 
         DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], 
         #ToolInfo.MachineID, #ToolInfo.ToolNoID,#ToolInfo.StartDate,
-        TotalCounter,PresetCounter,TLP.ToolLife_predicted,TLP.Segment_Based_Explanation_HTML,
+        TotalCounter,PresetCounter,TLP.ToolLife_predicted,TLP.Segment_Based_Explanation_md,
         LoadX_Alm,LoadZ_Alm,mmToolID,MesCT,UnitPrice
         FROM #ToolInfo
         LEFT OUTER JOIN ToolLifePrediction TLP 

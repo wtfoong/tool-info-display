@@ -528,7 +528,7 @@ def ShowTimerInfo():
                 st.button("❌ Close",key = f'close_{st.session_state.clicked_location}' , on_click=clear_selection_clicked_location)
                 st.markdown(f"### 📋 Upcoming Tool Change for {st.session_state.clicked_location}")
 
-                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm','mmToolID','ToolLife_predicted','Segment_Based_Explanation_HTML','MesCT','UnitPrice']
+                cols = ['Turret','Tool','Process','Balance (mins)', 'Balance (pcs)','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter', 'LoadX_Alm', 'LoadZ_Alm','mmToolID','ToolLife_predicted','Segment_Based_Explanation_md','MesCT','UnitPrice']
                 df = df_tool_data_all[df_tool_data_all['Location']==st.session_state.clicked_location]
                 df = df[cols].reset_index(drop=True)
                 df = BalanceClustering(df)
@@ -575,7 +575,7 @@ def ShowTimerInfo():
                     cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True, help = savingText if highlight else None)
                     cols[1].markdown(f"<div style='{style}'>{row['Tool']} ({row['ToolNoID']})</div>", unsafe_allow_html=True)
                     cols[2].markdown(f"<div>{row['Process']} - {row['mmToolID']}</div>", unsafe_allow_html=True)
-                    cols[3].markdown(f"<div>{row['ToolLife_predicted_final']}</div>", unsafe_allow_html=True,help= None if row['ToolLife_predicted_final'] == '-' else row['Segment_Based_Explanation_HTML'])
+                    cols[3].markdown(f"<div>{row['ToolLife_predicted_final']}</div>", unsafe_allow_html=True,help= None if row['ToolLife_predicted_final'] == '-' else row['Segment_Based_Explanation_md'])
                     cols[4].markdown(f"<div>{row['PresetCounter']}</div>", unsafe_allow_html=True)
                     cols[5].markdown(f"<div>{row['TotalCounter']}</div>", unsafe_allow_html=True)
                     cols[6].markdown(f"<div>{row['Balance (pcs)']}</div>", unsafe_allow_html=True)
