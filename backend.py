@@ -768,26 +768,39 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
         Questdb_df = get_questdb_data(Position,StartDate, ToolingStation, MachineName)
 
     if historyFlag:
-        if OT_DataLake_df.empty and Questdb_df.empty:
+        
+        if Questdb_df.empty:
             return pd.DataFrame()
-        Questdb_df.rename(columns={'ToolNo': 'ToolingStation'}, inplace=True)
 
-        Questdb_df['ToolingStation'] = Questdb_df['ToolingStation'].apply(lambda x: int(f"{x}0{x}"))
-        Questdb_df['ToolingStationSeqNum'] = Questdb_df['ToolingStation'].astype(str) +'_'+ Questdb_df['SeqNo'].astype(str)
-        
-        Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
-        OT_DataLake_df['TIMESTAMP'] = pd.to_datetime(OT_DataLake_df['TIMESTAMP'])
-        CurrentToolCountNQuestdbdf =pd.merge_asof(Questdb_df.sort_values('Timestamp'), OT_DataLake_df.sort_values('TIMESTAMP'), left_on='Timestamp', right_on='TIMESTAMP', direction='backward')
-        CurrentToolCountNQuestdbdf['Timestamp'] = pd.to_datetime(CurrentToolCountNQuestdbdf['Timestamp'], format='%d/%m/%Y %H:%M:%S.%f')
+        if OT_DataLake_df.empty or len(OT_DataLake_df)==0:
+            
+            Questdb_df.rename(columns={'ToolNo': 'ToolingStation'}, inplace=True)
 
-        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna(subset=['Duplicate'])
+            Questdb_df['ToolingStation'] = Questdb_df['ToolingStation'].apply(lambda x: int(f"{x}0{x}"))
+            Questdb_df['ToolingStationSeqNum'] = Questdb_df['ToolingStation'].astype(str) +'_'+ Questdb_df['SeqNo'].astype(str)
+            
+            Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
+            CurrentToolCountNQuestdbdf = Questdb_df
+            CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
+        else:
+            Questdb_df.rename(columns={'ToolNo': 'ToolingStation'}, inplace=True)
 
-        CurrentToolCountNQuestdbdf['VALUE'] =  CurrentToolCountNQuestdbdf['VALUE'].astype(int)
-        
-        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
-        
-        CurrentToolCountNQuestdbdf['ToolingStation'] = CurrentToolCountNQuestdbdf['ToolingStation_x']
-        CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns=['ToolingStation_x', 'ToolingStation_y'])
+            Questdb_df['ToolingStation'] = Questdb_df['ToolingStation'].apply(lambda x: int(f"{x}0{x}"))
+            Questdb_df['ToolingStationSeqNum'] = Questdb_df['ToolingStation'].astype(str) +'_'+ Questdb_df['SeqNo'].astype(str)
+            
+            Questdb_df['Timestamp'] = pd.to_datetime(Questdb_df['Timestamp'])
+            OT_DataLake_df['TIMESTAMP'] = pd.to_datetime(OT_DataLake_df['TIMESTAMP'])
+            CurrentToolCountNQuestdbdf =pd.merge_asof(Questdb_df.sort_values('Timestamp'), OT_DataLake_df.sort_values('TIMESTAMP'), left_on='Timestamp', right_on='TIMESTAMP', direction='backward')
+            CurrentToolCountNQuestdbdf['Timestamp'] = pd.to_datetime(CurrentToolCountNQuestdbdf['Timestamp'], format='%d/%m/%Y %H:%M:%S.%f')
+
+            CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.dropna(subset=['Duplicate'])
+
+            CurrentToolCountNQuestdbdf['VALUE'] =  CurrentToolCountNQuestdbdf['VALUE'].astype(int)
+            
+            CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.sort_values(by='Timestamp').reset_index(drop=True)
+            
+            CurrentToolCountNQuestdbdf['ToolingStation'] = CurrentToolCountNQuestdbdf['ToolingStation_x']
+            CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf.drop(columns=['ToolingStation_x', 'ToolingStation_y'])
     else:
         if Questdb_df.empty:
             return pd.DataFrame()
