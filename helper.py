@@ -80,10 +80,19 @@ def find_usl_lsl_for_cpk(USL,LSL, target_cpk=1.0):
 def GroupDfByPiecesMade(df,ToolingStation,IsHistory, IsMax=True):
     if IsHistory:
         if IsMax:
-            GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].max().reset_index()
+            if 'VALUE' not in df.columns:
+                GroupCurrentToolCountNQuestdbValue = df.groupby([f'T{ToolingStation:02}_Bal'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl','ToolingStation']].max().reset_index()
+            else:
+                GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].max().reset_index()
         else:
-            GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].mean().reset_index()
-        GroupCurrentToolCountNQuestdbValue = GroupCurrentToolCountNQuestdbValue.sort_values(by=['VALUE'], ascending=[False]).reset_index(drop=True)
+            if 'VALUE' not in df.columns:
+                GroupCurrentToolCountNQuestdbValue = df.groupby([f'T{ToolingStation:02}_Bal'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl','ToolingStation']].mean().reset_index()
+            else:
+                GroupCurrentToolCountNQuestdbValue = df.groupby(['VALUE', 'ToolingStation','SeqNo'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl']].mean().reset_index()
+        if 'VALUE' not in df.columns:
+            GroupCurrentToolCountNQuestdbValue = GroupCurrentToolCountNQuestdbValue.sort_values(by=[f'T{ToolingStation:02}_Bal'], ascending=[False]).reset_index(drop=True)
+        else:
+            GroupCurrentToolCountNQuestdbValue = GroupCurrentToolCountNQuestdbValue.sort_values(by=['VALUE'], ascending=[False]).reset_index(drop=True)
     else:
         if IsMax:
             GroupCurrentToolCountNQuestdbValue = df.groupby([f'T{ToolingStation:02}_Bal'])[['FeedRate', 'SpdlSpd_RPM','SpdlSpd_RPM_SP','Load_X','Load_Z','Load_Spdl','ToolingStation']].max().reset_index()
