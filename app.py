@@ -8,6 +8,8 @@ import base64
 # import local module
 from config_loader import load_config
 from streamlit_extras.stylable_container import stylable_container
+from streamlit_extras.local_storage_manager import local_storage_manager
+
 config = load_config()
 
 from backend import load_data, load_data_all, get_inspection_data, get_CTQ_SpecNo,merge_OT_DataLake_Questdb,get_questdb_data,get_historical_data,get_KPI_Data,get_History_Inspection_Data,get_questdb_offset_history
@@ -19,15 +21,17 @@ PAGE_REFRESH = config['refresh']['page_refresh']
 OFFSET_CACHE = config['refresh']['offset_cache']
 DEFAULT_CACHE_LIFE  = PAGE_REFRESH-OFFSET_CACHE #offset to avoid race
 INSPECTION_DATA_CACHE = config['refresh']['inspection_data_cache']
+PLANT_CODE_LIST = config['PlantCodeList']
+DISPLAY_MODE_LIST = ["Compact View","Standard","Condition Sorting","Full Information"]
 
 # ---- Caching functions ----
 
 # Load data into cache
 
 @st.cache_data(ttl= DEFAULT_CACHE_LIFE)
-def load_data_cached():
-    df_tool_data = load_data()
-    df_tool_data_all = load_data_all()
+def load_data_cached(plant_code: int = 2100):
+    df_tool_data = load_data(plant_code=plant_code)
+    df_tool_data_all = load_data_all(plant_code=plant_code)
     last_refresh = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     return df_tool_data, df_tool_data_all, last_refresh
 
@@ -58,8 +62,8 @@ def get_Current_Tool_Offset_History(MachineName, Position,StartDate, EndDate,Too
     df_Offet_Data = get_questdb_offset_history(MachineName, Position,StartDate, EndDate, ToolNo)
     return df_Offet_Data
 
-def get_History_Tool_Data(MachineName, Position, ToolingStation,StartDate, EndDate):
-    df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation,StartDate,EndDate)
+def get_History_Tool_Data(MachineName, Position, ToolingStation, StartDate, EndDate, plant_code: int = 2100):
+    df_Tool_Data = get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDate, plant_code=plant_code)
     return df_Tool_Data
 
 def get_Inspection_History_Data(MachineName,StartDate,EndDate):
@@ -71,6 +75,9 @@ def get_Inspection_History_Data(MachineName,StartDate,EndDate):
 page_title = config['app']['title']
 Tool_Change_min = config['thresholds']['ToolChange_min']
 st.set_page_config(page_title=page_title, layout="wide")
+storage = local_storage_manager()
+if not storage.ready():
+    st.stop()
 
 #! deprecating! UI flickers and lost session state...(filter selection etc gone...)
 # html meta tags to refresh at browser level
@@ -149,22 +156,72 @@ if 'clicked_NormalDistribution' not in st.session_state:
     
 if 'toggle_FullInfoFlag' not in st.session_state:
     st.session_state.toggle_FullInfoFlag = False
+    
+if 'toggle_OverView' not in st.session_state:
+    st.session_state.toggle_OverView = False
+    
+if 'toggle_Detail' not in st.session_state:
+    st.session_state.toggle_Detail = False
+
+if 'toggle_Status' not in st.session_state:
+    st.session_state.toggle_Status = False
+    
+if 'LAST_SELECTED_PLANT' not in st.session_state:
+    
+    stored = storage.get("LAST_SELECTED_PLANT", PLANT_CODE_LIST[0])
+    # safety if options change
+    st.session_state.LAST_SELECTED_PLANT = (
+        stored if stored in PLANT_CODE_LIST else PLANT_CODE_LIST[0]
+    )
+    
+if 'LAST_SELECTED_DISPLAYMODE' not in st.session_state:
+    
+    stored = storage.get("LAST_SELECTED_DISPLAYMODE", "Condition Sorting")
+    # safety if options change
+    st.session_state.LAST_SELECTED_DISPLAYMODE = (
+        stored if stored in DISPLAY_MODE_LIST else DISPLAY_MODE_LIST[0]
+    )
+
 
 # ---- Information Display ----
 
 # Read the image file and encode it to base64
-with open("images/robot-arm_5062552.png", "rb") as image_file:
+with open("images/robot-arm.png", "rb") as image_file:
     robotArmBase64 = base64.b64encode(image_file.read()).decode()
     
 # Read the image file and encode it to base64
 with open("images/milling-machine.png", "rb") as image_file:
     machineBase64 = base64.b64encode(image_file.read()).decode()
+    
+# Read the image file and encode it to base64
+with open("images/milling-machine_OverView.png", "rb") as image_file:
+    machineOverViewBase64 = base64.b64encode(image_file.read()).decode()
+    
+# Read the image file and encode it to base64
+with open("images/robot-arm_OverView.png", "rb") as image_file:
+    robotArmOverViewBase64 = base64.b64encode(image_file.read()).decode()
+    
+# Read the image file and encode it to base64
+with open("images/milling-machine_OverViewWhite.png", "rb") as image_file:
+    machineOverViewWhiteBase64 = base64.b64encode(image_file.read()).decode()
+    
+# Read the image file and encode it to base64
+with open("images/robot-arm_OverViewWhite.png", "rb") as image_file:
+    robotArmOverViewWhiteBase64 = base64.b64encode(image_file.read()).decode()
 
-df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+df_tool_data, df_tool_data_all, last_refresh = load_data_cached(st.session_state.LAST_SELECTED_PLANT)
 with st.container():
-        col1, col2, col3,col4 = st.columns(4)
+        col1, col2, col3,col4,col5,col6 = st.columns(6)
 
         with col2:
+            
+            def persist():
+                storage["LAST_SELECTED_PLANT"] = st.session_state.LAST_SELECTED_PLANT
+
+            st.selectbox(label='Plant', options=PLANT_CODE_LIST, label_visibility='collapsed',on_change=persist, key="LAST_SELECTED_PLANT")
+            
+        
+        with col3:
             operator_df = (
                 df_tool_data[['EmpNo', 'EmpName']]
                 .drop_duplicates()
@@ -174,7 +231,7 @@ with st.container():
             operator_options = list(operator_df.itertuples(index=False, name=None))
 
             selected = st.multiselect(
-                label=' ',
+                label='Operator',
                 options=operator_options,
                 format_func=lambda x: f"{x[0]} - {x[1]}",
                 placeholder='Choose Operator',
@@ -183,7 +240,7 @@ with st.container():
             )
             selected_empnos = [opt[0] for opt in selected]
                 
-        with col3:
+        with col4:
             
             filtered = df_tool_data
             if len(selected_empnos)>0:
@@ -191,19 +248,60 @@ with st.container():
             location_options = sorted(filtered['Location'].dropna().unique())
 
             selected_locations = st.multiselect(label = ' ', label_visibility='collapsed', options=location_options, placeholder='Choose Machine')
-        with col4:
-            FullInfoFlag = st.toggle("Full information")
-            if FullInfoFlag:
-                st.session_state.toggle_FullInfoFlag = True
-            else:
+        with col5:
+            def persist():
+                storage["LAST_SELECTED_DISPLAYMODE"] = st.session_state.LAST_SELECTED_DISPLAYMODE
+                
+            PageMode = st.selectbox(
+                        label='Page Mode',
+                        options=DISPLAY_MODE_LIST,
+                        label_visibility='collapsed',
+                        on_change=persist, key="LAST_SELECTED_DISPLAYMODE"
+                    )
+            if PageMode == "Compact View":
+                st.session_state.toggle_OverView = True
+                
+                st.session_state.toggle_Detail = False
                 st.session_state.toggle_FullInfoFlag = False
+                st.session_state.toggle_Status = False
                 
                 st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
                 st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+            elif PageMode == "Standard":
+                st.session_state.toggle_Detail = True
+                
+                st.session_state.toggle_OverView = False
+                st.session_state.toggle_FullInfoFlag = False
+                st.session_state.toggle_Status = False
+                
+                st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+            elif PageMode == "Condition Sorting":
+                st.session_state.toggle_Status = True
+                
+                st.session_state.toggle_OverView = False
+                st.session_state.toggle_FullInfoFlag = False
+                st.session_state.toggle_Detail = False
+                
+                st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
+                st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
+            elif PageMode == "Full Information":
+                st.session_state.toggle_FullInfoFlag = True
+                
+                st.session_state.toggle_OverView = False
+                st.session_state.toggle_Detail = False
+                st.session_state.toggle_Status = False
+                
+
+                
+                
                 
 @st.fragment(run_every=str(PAGE_REFRESH)+"s")
 def ShowTimerInfo():
-    df_tool_data, df_tool_data_all, last_refresh = load_data_cached()
+    df_tool_data, df_tool_data_all, last_refresh = load_data_cached(st.session_state.LAST_SELECTED_PLANT)
+    if df_tool_data.empty:
+        st.warning("No data available for the selected plant.")
+        return
                 
     filtered_df = df_tool_data.copy()
     filtered_df = GetAllMachineToolChange(filtered_df,df_tool_data_all,Tool_Change_min)
@@ -213,8 +311,80 @@ def ShowTimerInfo():
         filtered_df = filtered_df[filtered_df["Location"].isin(selected_locations)]
     
     filtered_df = SplitToolDataByOperator(filtered_df)
-    filtered_df = filtered_df.sort_values(by=['MacLEDRed','MacLEDYellow','TechRequired','MacLEDGreen','DurationMins'],ascending=[False,False,False,False,True]).reset_index(drop=True)
+    #filtered_df = filtered_df.sort_values(by=['MacLEDRed','MacLEDYellow','TechRequired','MacLEDGreen','DurationMins'],ascending=[False,False,False,False,True]).reset_index(drop=True)
+    if st.session_state.toggle_Status:
+        filtered_df = filtered_df.sort_values(by=['MacLEDRed','MacLEDYellow','TechRequired','MacLEDGreen','DurationMins'],ascending=[False,False,False,False,True]).reset_index(drop=True)
+    elif st.session_state.toggle_OverView:
+        filtered_df = filtered_df.sort_values(by=['MachineTurnOff','DurationMins'],ascending=[True,True]).reset_index(drop=True)
+    else:
+        filtered_df = filtered_df.sort_values(by=['MachineTurnOff','DurationMins'],ascending=[True,True]).reset_index(drop=True)
     st.markdown(f"<p style='text-align: center; color: grey;'>Last refreshed: {last_refresh}</p>", unsafe_allow_html=True)
+    
+    if st.session_state.toggle_OverView:
+        with st.container():
+            MachineChunks = [filtered_df[i:i+7] for i in range(0, len(filtered_df), 7)]
+            for MachineList in MachineChunks:
+                
+                row_cols = st.columns(7)
+
+                for i, col in enumerate(row_cols):
+                        # If there's an item for this column, render it; otherwise leave blank
+                        machine = MachineList.iloc[i] if i < len(MachineList) else None
+
+                        # NOTE: Streamlit's container() does not support a `height` argument.
+                        # You can still use container(), and control appearance inside.
+                        tile = col.container()  # e.g., tile = col.container(border=True) if you want borders
+
+                        if machine is not None:
+                            NoToolDataFlag =  machine['ToolingStation'] == 9999
+                            backGroundColor, blink_style = set_timer_style(machine['SuggestedToolChangeTime'] if pd.notna(machine['SuggestedToolChangeTime']) else machine['DurationMins'],True)
+                            # Replace :balloon: and the following lines with what you want to display
+                            TowerLightBackGroundColor = (
+                                'red' if machine['MacLEDRed'] else
+                                '#FFBF00' if machine['MacLEDYellow'] else
+                                '#00FF00' if machine['MacLEDGreen'] else
+                                'black'
+                            )
+                            
+                            FontColor = 'white'
+                            MachineOverviewIcon = machineOverViewWhiteBase64
+                            RobotArmOverviewIcon = robotArmOverViewWhiteBase64
+                            
+                            if not machine['MachineTurnOff']:
+                                FontColor = 'black'
+                                MachineOverviewIcon = machineOverViewBase64
+                                RobotArmOverviewIcon = robotArmOverViewBase64
+                            
+                            #tile.title(machine['Location'])
+                            tile.markdown(
+                            f"""
+                            <style>
+                                @keyframes blinker {{
+                                    50% {{ opacity: 0; }}
+                                }}
+                            </style>
+                            <div class='circle-container' style="height:auto;justify-content: space-evenly;font-size: 1.99vw; border: 1px solid grey; 
+                                    border-radius: 0.5rem; margin-bottom:5px; background:{TowerLightBackGroundColor};{"" if NoToolDataFlag or  machine['MachineTurnOff'] else f"{blink_style};"}">
+                                <span style=" color: {FontColor}">
+                                    <strong>
+                                        {machine['Location']} 
+                                    </strong>
+                                </span>
+                                <span style='{"font-size: 1.99vw;animation: blinker 1s linear infinite;" if machine['TechRequired'] and not machine['MachineTurnOff'] else "color: gray; opacity: 0;"}'>
+                                            <img src='data:image/png;base64,{ RobotArmOverviewIcon if machine['MacErrorType'] == 2 and machine['TechRequired'] else MachineOverviewIcon}' alt='icon' style='height: 1em; vertical-align: middle; background:'/>
+                                </span>
+                                <span style=" {"color:black;" if machine['MachineTurnOff'] else (f"color:{FontColor}" if NoToolDataFlag else f"color:{FontColor}; {blink_style};" )}">{"N/A" if NoToolDataFlag else (str(max(0,machine['SuggestedToolChangeTime'])) if pd.notna(machine['SuggestedToolChangeTime']) else machine['DurationMins'])}{f"<sup style='font-size: 0.7em;color: #A3A8B8'>{machine['AdjustTime']}</sup>" if pd.notna(machine['SuggestedToolChangeTime']) else ""}</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+    else:
+        DetailNFullInfoUI(filtered_df)
+
+   
+
+def DetailNFullInfoUI(filtered_df):
     with st.container(height=70):
         col1, col2, col3 = st.columns([1,40,1])
         
@@ -224,11 +394,11 @@ def ShowTimerInfo():
             header_titles = []
             if st.session_state.toggle_FullInfoFlag:
                 header_cols = st.columns([1,1,1, 1,1,1, 1, 1,1,1])
-                header_titles = ['Machine','Tech Call (min)','Status','Cnt Down(min)','Change Time','Tool Change', 'Tool Detail', 'History', 'Ppk','KPI']
+                header_titles = ['Machine','Call Tech (min)','Status','Cnt Down(min)','Change Time','Tool Change', 'Tool Detail', 'History', 'Ppk','KPI']
                 
             else:
                 header_cols = st.columns([1,1,1, 1,1,1, 1, 1])
-                header_titles = ['Machine','Tech Call (min)','Status','Count Down(min)','Change Time','Tool Change', 'Tool Detail', 'Ppk']
+                header_titles = ['Machine','Call Tech (min)','Status','Count Down(min)','Change Time','Tool Change', 'Tool Detail', 'Ppk']
             
             for col, title in zip(header_cols, header_titles):
                 col.markdown(
@@ -258,33 +428,15 @@ def ShowTimerInfo():
                                     </strong></div>""", unsafe_allow_html=True)  
                     
                 with colTechCall:
-                    if row['TechRequired']:
-                        if row['MacErrorType'] == 2:
-                            st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
+                    st.markdown(f"""
+                                    <div class='circle-container' style='font-size: 1.99vw; {"animation: blinker 1s linear infinite;" if row['TechRequired'] else "color: gray; opacity: 0.2;"}'>
                                         <strong>
                                             <span>
-                                                <img src='data:image/png;base64,{robotArmBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
+                                                <img src='data:image/png;base64,{robotArmBase64 if row['MacErrorType'] == 2 and row['TechRequired'] else machineBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
                                                 {row['TechRequestMin']}
                                             </span>
                                         </strong></div>""", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                                    <div class='circle-container' style='font-size: 1.99vw;animation: blinker 1s linear infinite;'>
-                                        <strong>
-                                            <span>
-                                                <img src='data:image/png;base64,{machineBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> 
-                                                {row['TechRequestMin']}
-                                            </span>
-                                        </strong></div>""", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                                <div class='circle-container' style='font-size: 1.99vw;'>
-                                    <strong>
-                                        <span style='color: gray; opacity: 0.2;'>
-                                            <img src='data:image/png;base64,{machineBase64}' alt='icon' style='height: 1em; vertical-align: middle;'/> {row['TechRequestMin']}
-                                        </span>
-                                    </strong></div>""", unsafe_allow_html=True)                                                     
+                                                                     
                 with colMacStatus:
                     TowerLightBackGroundColor = (
                         'red' if row['MacLEDRed'] else
@@ -300,77 +452,46 @@ def ShowTimerInfo():
                                     </strong>{colorUI}</div>""", unsafe_allow_html=True) 
 
                 with col_timer:
-                    if NoToolDataFlag:
-                        st.markdown(
-                            f"""
-                            <style>
-                                @keyframes blinker {{
-                                    50% {{ opacity: 0; }}
-                                }}
-                            </style>
-                            <div class='circle-container' style="color: #555755; font-size: 1.99vw; justify-content: space-evenly;">
-                                <span> N/A </span>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        
-                        
 
-                        st.markdown(
-                            f"""
-                            <style>
-                                @keyframes blinker {{
-                                    50% {{ opacity: 0; }}
-                                }}
-                            </style>
-                            <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
-                                <span>{str(max(0,row['SuggestedToolChangeTime'])) if pd.notna(row['SuggestedToolChangeTime']) else row['DurationMins']}{f"<sup style='font-size: 0.7em;color: #A3A8B8'>{row['AdjustTime']}</sup>" if pd.notna(row['SuggestedToolChangeTime']) else ""}</span>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                            #help= str(row['SuggestedToolChangeTime']) if pd.notna(row['SuggestedToolChangeTime']) else None
-                        )
+                    st.markdown(
+                        f"""
+                        <style>
+                            @keyframes blinker {{
+                                50% {{ opacity: 0; }}
+                            }}
+                        </style>
+                        <div class='circle-container' style="justify-content: space-evenly; font-size: 1.99vw;">
+                            <span style="{ "color: #555755" if NoToolDataFlag else f"color: {backGroundColor}; {blink_style};"}">
+                                {"N/A" if NoToolDataFlag else (str(max(0,row['SuggestedToolChangeTime'])) if pd.notna(row['SuggestedToolChangeTime']) else row['DurationMins'])}{f"<sup style='font-size: 0.7em;color: #A3A8B8'>{row['AdjustTime']}</sup>" if pd.notna(row['SuggestedToolChangeTime']) else ""}
+                            </span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                        #help= str(row['SuggestedToolChangeTime']) if pd.notna(row['SuggestedToolChangeTime']) else None
+                    )
                         #print(row['SuggestedToolChangeTime'])
                 with colChangeTime:
-                    if NoToolDataFlag:
-                        st.markdown(
-                            f"""
-                            <style>
-                                @keyframes blinker {{
-                                    50% {{ opacity: 0; }}
-                                }}
-                            </style>
-                            <div class='circle-container' style="color: #555755; font-size: 1.99vw; justify-content: space-evenly;">
-                                <span> N/A </span>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-                    else:
-                        currentTime = datetime.now()
-                        ToolChangeTime = currentTime + timedelta(minutes=row['DurationMins'])
-                        if pd.notna(row['SuggestedToolChangeTime']):
-                            SuggestedToolChangeTime = currentTime + timedelta(minutes=row['SuggestedToolChangeTime'])
+                    currentTime = datetime.now()
+                    ToolChangeTime = currentTime + timedelta(minutes=row['DurationMins'])
+                    if pd.notna(row['SuggestedToolChangeTime']):
+                        SuggestedToolChangeTime = currentTime + timedelta(minutes=row['SuggestedToolChangeTime'])
 
-                        st.markdown(
-                            f"""
-                            <style>
-                                @keyframes blinker {{
-                                    50% {{ opacity: 0; }}
-                                }}
-                            </style>
-                            <div class='circle-container' style="color: {backGroundColor}; font-size: {1.78 if st.session_state.toggle_FullInfoFlag else 1.99 }vw; {blink_style};justify-content: space-evenly;">
-                                <span>{SuggestedToolChangeTime.strftime('%I:%M %p').lstrip('0') if pd.notna(row['SuggestedToolChangeTime']) else ToolChangeTime.strftime('%I:%M %p').lstrip('0')}</span>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                            help=f"Original time: {ToolChangeTime.strftime('%I:%M %p').lstrip('0')}"if pd.notna(row['SuggestedToolChangeTime']) and st.session_state.toggle_FullInfoFlag else ""
-                        )
+                    st.markdown(
+                        f"""
+                        <style>
+                            @keyframes blinker {{
+                                50% {{ opacity: 0; }}
+                            }}
+                        </style>
+                        <div class='circle-container' style="font-size: {1.78 if st.session_state.toggle_FullInfoFlag else 1.99 }vw; justify-content: space-evenly;">
+                            <span style="{ "color: #555755" if NoToolDataFlag else f"color: {backGroundColor}; {blink_style};"}">{"N/A" if NoToolDataFlag else (SuggestedToolChangeTime.strftime('%I:%M %p').lstrip('0') if pd.notna(row['SuggestedToolChangeTime']) else ToolChangeTime.strftime('%I:%M %p').lstrip('0'))}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                        help=f"Original time: {ToolChangeTime.strftime('%I:%M %p').lstrip('0')}"if pd.notna(row['SuggestedToolChangeTime']) and st.session_state.toggle_FullInfoFlag else ""
+                    )
                     
                 with colToolChange:
-                    if NoToolDataFlag:
                         st.markdown(
                             f"""
                             <style>
@@ -378,23 +499,8 @@ def ShowTimerInfo():
                                     50% {{ opacity: 0; }}
                                 }}
                             </style>
-                            <div class='circle-container' style="color: #555755; font-size: 1.99vw;justify-content: space-evenly;">
-                                <span> N/A </span>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )  
-                        
-                    else:
-                        st.markdown(
-                            f"""
-                            <style>
-                                @keyframes blinker {{
-                                    50% {{ opacity: 0; }}
-                                }}
-                            </style>
-                            <div class='circle-container' style="color: {backGroundColor}; font-size: 1.99vw; {blink_style};justify-content: space-evenly;">
-                                <span>{row['ToolChangeNumber']}</span>
+                            <div class='circle-container' style="font-size: 1.99vw; justify-content: space-evenly;">
+                                <span style="{ "color: #555755" if NoToolDataFlag else f"color: {backGroundColor}; {blink_style};"}">{"N/A" if NoToolDataFlag else row['ToolChangeNumber']}</span>
                             </div>
                             """,
                             unsafe_allow_html=True,
@@ -468,13 +574,13 @@ def ShowTimerInfo():
                             st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                             st.session_state.clicked_KPI = None # 👈 force close the clicked_KPI button
                             st.rerun()
+                
                 if st.session_state.toggle_FullInfoFlag:
                     with col_history:
                         st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
 
                         if NoToolDataFlag:
                             st.button("History 🛠️", key=f"btn_{row['Location']}_History", use_container_width=True,disabled=True)
-                            
                         else:
                             # Store selected location for showing details at bottom section
                             if st.button("History 🛠️", key=f"btn_{row['Location']}_History", use_container_width=True):
@@ -485,7 +591,6 @@ def ShowTimerInfo():
                                 # else:
                                 st.session_state.clicked_location_History = row['Location'] # update session state
                                 st.session_state.clicked_machineID_History = row['MachineID'] # update session state
-
                                 st.session_state.clicked_materialcode = None  # 👈 force close the clicked_materialcode button
                                 st.session_state.clicked_materialdesc = None  # 👈 Reset material description
                                 st.session_state.clicked_location = None # 👈 force close the clicked_location button
@@ -508,9 +613,9 @@ def ShowTimerInfo():
                                 st.session_state.clicked_location_History = None # 👈 force close the clicked_location_History button
                                 st.session_state.clicked_search_History = None # 👈 force close the clicked_search_History button
                                 st.rerun()
-                                
-
-    # Placeholder for dynamic content
+       
+     # Placeholder for dynamic content
+    
     placeholder = st.empty()
 
     # ---- Bottom Section: Show tool data for clicked_location ----
@@ -545,8 +650,10 @@ def ShowTimerInfo():
                 #min_balance = df['Balance (mins)'].min() + Tool_Change_min
 
                 # Header row
-                header_cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1,1])
-                header_titles = ['Turret', 'Tool', 'Process','Predicted (pcs)','Preset (pcs)','Actual (pcs)', 'Balance (pcs)', 'Balance (mins)', 'LoadX', 'LoadZ']
+                #header_cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1,1])
+                header_cols = st.columns([1, 1, 2, 1, 1,1,1, 1])
+                #header_titles = ['Turret', 'Tool', 'Process','Predicted (pcs)','Preset (pcs)','Actual (pcs)', 'Balance (pcs)', 'Balance (mins)', 'LoadX', 'LoadZ']
+                header_titles = ['Turret', 'Tool', 'Process','Predicted (pcs)','Preset (pcs)','Actual (pcs)', 'Balance (pcs)', 'Balance (mins)']
                 for col, title in zip(header_cols, header_titles):
                     col.markdown(f"**{title}**")
                 
@@ -570,7 +677,8 @@ def ShowTimerInfo():
                     savingText = f"Original need {OriginalTime}, currently need {CurrentTime}, total time saving {savings} minutes, extra produce {ExtraProduce} pcs"
 
 
-                    cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1,1])  # Adjust column widths
+                    #cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1,1])  # Adjust column widths
+                    cols = st.columns([1, 1, 2, 1, 1,1,1, 1])  # Adjust column widths
 
                     cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True, help = savingText if highlight else None)
                     cols[1].markdown(f"<div style='{style}'>{row['Tool']} ({row['ToolNoID']})</div>", unsafe_allow_html=True)
@@ -580,20 +688,21 @@ def ShowTimerInfo():
                     cols[5].markdown(f"<div>{row['TotalCounter']}</div>", unsafe_allow_html=True)
                     cols[6].markdown(f"<div>{row['Balance (pcs)']}</div>", unsafe_allow_html=True)
                     cols[7].markdown(f"<div style='{style}'>{row['Balance (mins)']}</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)  # Top spacer
 
                         
 
-                    if cols[8].button("LoadX", key=f"btn_LoadX_{i}"):
-                        if st.session_state[f'visible_graph_row_{i}'] == "LoadX":
-                            st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
-                        else:
-                            st.session_state[f'visible_graph_row_{i}'] = "LoadX"
+                    # if cols[8].button("LoadX", key=f"btn_LoadX_{i}"):
+                    #     if st.session_state[f'visible_graph_row_{i}'] == "LoadX":
+                    #         st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
+                    #     else:
+                    #         st.session_state[f'visible_graph_row_{i}'] = "LoadX"
 
-                    if cols[9].button("LoadZ", key=f"btn_LoadZ_{i}"):
-                        if st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
-                            st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
-                        else:
-                            st.session_state[f'visible_graph_row_{i}'] = "LoadZ"
+                    # if cols[9].button("LoadZ", key=f"btn_LoadZ_{i}"):
+                    #     if st.session_state[f'visible_graph_row_{i}'] == "LoadZ":
+                    #         st.session_state[f'visible_graph_row_{i}'] = None # Hide if already visible
+                    #     else:
+                    #         st.session_state[f'visible_graph_row_{i}'] = "LoadZ"
                     
                         
                     if st.session_state[f'visible_graph_row_{i}'] == "LoadX":
@@ -653,7 +762,8 @@ def ShowTimerInfo():
 
                 
                 st.markdown('---')
-
+     
+                                
    
 def GetTowerLightUI(color):
     colorUI = f"""
@@ -726,8 +836,9 @@ if st.session_state.clicked_materialcode:
             st.markdown('---')
 
  # ---- Bottom Section: Show History data for clicked_History ----
+
 if st.session_state.clicked_location_History:
-    _, df_tool_data_all, _ = load_data_cached()
+    _, df_tool_data_all, _ = load_data_cached(st.session_state.LAST_SELECTED_PLANT)
     with placeholder.container():
         col1, col2, col3 = st.columns([1,30,1])
 
@@ -822,10 +933,11 @@ if st.session_state.clicked_location_History:
                 else:
                     df_history = get_History_Tool_Data(
                         MachineName=st.session_state.clicked_search_History,
-                        Position=OptionTurret, 
-                        ToolingStation=OptionStation,  
-                        StartDate=StartDate,  
-                        EndDate=EndDate
+                        Position=OptionTurret,
+                        ToolingStation=OptionStation,
+                        StartDate=StartDate,
+                        EndDate=EndDate,
+                        plant_code=st.session_state.LAST_SELECTED_PLANT
                     )
                     cols = ['Turret','Tool','Process','MachineID', 'ToolNoID', 'StartDate', 'TotalCounter','PresetCounter','CompletedDate','LoadX_Alm', 'LoadZ_Alm','mmToolID']
                     df_history = df_history[cols].reset_index(drop=True)
@@ -933,10 +1045,11 @@ if st.session_state.clicked_location_History:
                 
                     df_history = get_History_Tool_Data(
                         MachineName=st.session_state.clicked_NormalDistribution,
-                        Position=OptionTurret, 
-                        ToolingStation=OptionStation,  
-                        StartDate=StartDate,  
-                        EndDate=EndDate
+                        Position=OptionTurret,
+                        ToolingStation=OptionStation,
+                        StartDate=StartDate,
+                        EndDate=EndDate,
+                        plant_code=st.session_state.LAST_SELECTED_PLANT
                     )
                     
                     df_PPKHistory = get_Inspection_History_Data(
