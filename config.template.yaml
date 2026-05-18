@@ -17,3 +17,5 @@ data:
   source_path: "./data/tool_data.csv" # placeholder, used to stored dimension list later
 
 demo_mode: true
+
+PlantCodeList: ['2100', '3100', '3300']

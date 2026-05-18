@@ -21,8 +21,17 @@ from backend import get_questdb_offset_history
 config = load_config()
 
 # ---- set timer style ----
-def set_timer_style(DurationMin):
+def set_timer_style(DurationMin, IsOverView = False):
 
+    if IsOverView:
+        if DurationMin <= 0:
+            blink_style = "animation: blinker 1s linear infinite;"
+            color=""
+        else:
+            blink_style = ""
+            color=""
+        return color, blink_style
+        
     DurationMin_Red = config['thresholds']['duration_min']['red']
     DurationMin_Amber = config['thresholds']['duration_min']['amber']
 
@@ -579,7 +588,8 @@ def plotNormalDistributionPlotly(df,title):
     # Create KDE curve using create_distplot
     hist_data = [df['TotalCounter']]
     group_labels = ['TotalCounter']
-    if len(df) > 1:
+
+    if len(df) > 1 and df['TotalCounter'].nunique() > 1:
         fig_kde = ff.create_distplot(hist_data, group_labels,
                                  show_hist=False, show_curve=True,colors=['white'])
     
@@ -756,6 +766,13 @@ def GetAllMachineToolChange(df_tool_data, df_tool_data_all,Tool_Change_min):
             df_tool_data.loc[index, 'ToolChangeNumber'] = ToolChangeNumber
             
     df_tool_data['ToolChangeNumber'] = df_tool_data['ToolChangeNumber'].astype('Int64')
+    
+    df_tool_data['MachineTurnOff'] = (
+            (~df_tool_data['MacLEDRed'].fillna(False))   &
+            (~df_tool_data['MacLEDYellow'].fillna(False)) &
+            (~df_tool_data['MacLEDGreen'].fillna(False))
+    )
+
     return df_tool_data
 
 def GetAllMachineSuggestedChangeToolTime(df_tool_data):

@@ -82,248 +82,308 @@ def get_Questdb_connection():
 # ---- Business Logic ----
 
 # get tool data (min duration only)
-def load_data(limit: int = 1000):
+def load_data(limit: int = 1000, plant_code: int = 2100):
     if not DEMO_MODE:
         conn = get_db_connection()
-        query = f'''
+        query = '''
         SET NOCOUNT ON
-        SET ANSI_WARNINGS OFF;
+        SET ANSI_WARNINGS OFF
+        ;
 
         -- 01/01/9999 Add in TechCall with MHA/Mac Error
         -- 01/01/9999 Add in ToolLifePrediction
         -- 06/11/2025 Add in Machine without ToolLife information (Only for Technical Call Function)
         -- 11/11/2025 Add in Material information
+        -- 04/05/2026 Revise new MDM
 
-        DECLARE @Plant INT=2100
-        ------------------------------------------- ToolCounter ------------------------------------
-        SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, TL.IsActiveTool,
-        DATEADD(HOUR, 8, TL.StartDate) AS StartDate, GetDate() CompletedDate,TN.ToolPieces,
-        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        ISNULL(mmTool.PresetCounter,0)PresetCounter,
-        mmTool.LoadX_Alm,mmTool.LoadZ_Alm
-        INTO #ToolLife FROM ToolLife TL
-        INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        ON TL.ToolNoId=TN.Id
-        WHERE TN.MachineID LIKE 'MS%'
-        AND TL.IsActiveTool=1
-        ORDER BY MACHINEID,SAPCode DESC
+        DECLARE @Plant INT
+        SET @Plant = ?
 
-        --SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
-        --TL.StartDate, TL.CompletedDate,TN.ToolPieces,
-        --mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        --ISNULL(mmTool.PresetCounter,0)PresetCounter
-        --INTO #ToolLifeHist FROM ToolLifeHistory TL
-        --INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        --ON TL.ToolNoId=TN.Id
-        --WHERE TL.ToolNoId IN (SELECT ToolNoID FROM #ToolLife)
-        --ORDER BY MACHINEID,SAPCode DESC
+        ------------------------------------------- Step 1: Tool Life Data ------------------------------------
+        -- ToolMaterialMachine 的 Unique Key: Plant + ToolNo + Material + MachineID + ToolingStation + Remark1
+        -- 必须加上 ToolLife.Material = TMM.Material 才能 1:1 对应，避免数据乘数膨胀
 
-        --INSERT INTO #ToolLife SELECT * FROM #ToolLifeHist
-        -- drop table #ToolLife,#ToolLifeHist
+        SELECT
+            TL.Id                                           AS ToolLifeId,
+            TL.ToolNoID,
+            TN.MachineId,
+            TN.ToolCode,
+            TN.ToolingStation,
+            ISNULL(TMM.Remark1, TN.Remark1)                 AS ToolingMainCategory,
+            ISNULL(TMM.Remark2, TN.Remark2)                 AS ToolingSubCategory,
+            TL.TotalCounter,
+            ISNULL(TL.PresetCounter, 0)                     AS PresetCounter,
+            (ISNULL(TL.PresetCounter, 0) - TL.TotalCounter) AS Balance,
+            DATEADD(HOUR, 8, TL.StartDate)                  AS StartDate,
+            T.ToolNo                                        AS mmToolID,
+            VM.CostPerUOM                                   AS UnitPrice,
+            0                                               AS LoadX_Alm,
+            0                                               AS LoadZ_Alm
+        INTO #ToolLife
+        FROM [SPLOEELOT].[dbo].[ToolLife] TL
+        INNER JOIN [SPLOEELOT].[dbo].[ToolNo] TN
+            ON  TL.ToolNoID = TN.Id
+            AND ISNULL(TN.Delflag, 0) = 0
+        INNER JOIN [MDM].[dbo].[TTOOL] T
+            ON  TN.ToolCode = T.ToolNo
+            AND T.Plant     = @Plant
+            AND ISNULL(T.DelFlag, 0) = 0
+        LEFT JOIN [MDM].[dbo].[ToolMaterialMachine] TMM
+            ON  TMM.ToolNo         = TN.ToolCode
+            AND TMM.MachineID      = TN.MachineId
+            AND TMM.Material       = TL.Material
+            AND TMM.ToolingStation = TN.ToolingStation
+            AND TMM.Remark1        = TN.Remark1
+            AND TMM.Remark2        = TN.Remark2
+            AND TMM.Plant          = @Plant
+            AND TMM.IsDeleted      = 0
+        LEFT JOIN (
+            SELECT Plant, ToolNo, CostPerUOM,
+                ROW_NUMBER() OVER (PARTITION BY Plant, ToolNo ORDER BY ValidFrom DESC) AS rn
+            FROM [MDM].[dbo].[TOOLVSMAKER]
+            WHERE IsDeleted = 0
+        ) VM
+            ON  VM.ToolNo = TN.ToolCode
+            AND VM.Plant  = @Plant
+            AND VM.rn     = 1
+        WHERE TN.MachineId LIKE 'MS%'
+        AND TL.IsActiveTool = 1
+        AND ISNULL(TL.Delflag, 0) = 0
 
-        ------------------------------------------- Material & Machine Information ------------------------------------
-        SELECT Plant, MachineID, Dept, MaterialCode, MaterialDescription, MesCT
-        INTO #Session  FROM [SPLOEE].[dbo].[Session]
-        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
-        AND SessionStatus='RUNNING' AND Plant=@Plant
+        ------------------------------------------- Step 2: Session (MesCT, Material) ------------------------------------
+        SELECT MachineID, MesCT, MaterialCode, MaterialDescription
+        INTO #Session
+        FROM [SPLOEE].[dbo].[Session]
+        WHERE MachineID IN (SELECT DISTINCT MachineId FROM #ToolLife)
+        AND SessionStatus = 'RUNNING'
+        AND Plant = CAST(@Plant AS NVARCHAR)
 
-        SELECT Plant,Dept,MachineID,MachineNo Location
-        INTO #WCMachineID FROM [MDM].[dbo].[WorkCenterMachineID]
-        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
-        AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
+        ------------------------------------------- Step 3: Machine Location ------------------------------------
+        SELECT MachineID, MachineNo AS Location
+        INTO #WCMachineID
+        FROM [MDM].[dbo].[WorkCenterMachineID]
+        WHERE MachineID IN (SELECT DISTINCT MachineId FROM #ToolLife)
+        AND DelFlag  = 0
+        AND isActive = 1
+        AND Plant    = @Plant
 
-        ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm
-        INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,LoadX_Alm,LoadZ_Alm
-        ORDER BY MachineID,ToolingMainCategory,ToolingStation
+        ------------------------------------------- Step 4: Combine into ToolInfo ------------------------------------
+        SELECT
+            TL.ToolNoID,
+            TL.MachineId,
+            TL.ToolingStation,
+            TL.ToolingMainCategory,
+            TL.ToolingSubCategory,
+            TL.TotalCounter,
+            TL.PresetCounter,
+            CASE WHEN TL.Balance < 0 THEN 0 ELSE TL.Balance END AS Balance,
+            TL.StartDate,
+            TL.mmToolID,
+            TL.LoadX_Alm,
+            TL.LoadZ_Alm,
+            TL.UnitPrice,
+            S.MesCT,
+            S.MaterialCode,
+            S.MaterialDescription,
+            W.Location,
+            CASE
+                WHEN TL.Balance <= 0 THEN 0
+                ELSE CONVERT(INT, (TL.Balance * ISNULL(S.MesCT, 0)) / 60) 
+            END AS DurationMins
+        INTO #ToolInfo
+        FROM #ToolLife TL
+        LEFT JOIN #Session     S ON S.MachineID = TL.MachineId
+        LEFT JOIN #WCMachineID W ON W.MachineID = TL.MachineId
 
-        SELECT #TL.*,(#TL.PresetCounter-#TL.TotalCounter) Balance, 
-        #Session.MesCT,#Session.MaterialCode,#Session.MaterialDescription,
-        #WCMachineID.Location,0 DurationMins
-        INTO #ToolInfo FROM #TL
-        LEFT OUTER JOIN #Session ON #TL.MachineID=#Session.MachineID
-        LEFT OUTER JOIN #WCMachineID ON #TL.MachineID=#WCMachineID.MachineID
+        ------------------------------------------- Step 5: Muratec ToolCount Override ------------------------------------
+        --UPDATE TI
+        --SET
+        --    TI.PresetCounter = TC.ToolSetPoint,
+        --    TI.Balance       = TC.ToolBalance,
+        --    TI.TotalCounter  = TC.ToolQty,
+        --    TI.DurationMins  = CASE
+        --                           WHEN TC.ToolBalance <= 0 THEN 0
+        --                           ELSE (TC.ToolBalance * ISNULL(TI.MesCT, 0)) / 60
+        --                       END
+        --FROM #ToolInfo TI
+        --INNER JOIN ToolCount TC
+        --    ON  TC.MacID        = TI.MachineId
+        --    AND TC.MainCategory = TI.ToolingMainCategory
+        --    AND TC.ToolStation  = TI.ToolingStation
 
-        ------------------------------------------- Revise ToolCounter (Muratec Data) 27/06/25 ------------------------------------
-        UPDATE TI 
-        SET 
-        TI.PresetCounter = TC.ToolSetPoint,
-        TI.Balance = TC.ToolBalance,
-        TI.TotalCounter = TC.ToolQty
-        FROM 
-        #ToolInfo TI 
-        INNER JOIN ToolCount TC ON 
-        TI.MachineID = TC.MacID
-        AND TI.ToolingMainCategory = TC.MainCategory
-        AND TI.ToolingStation = TC.ToolStation
+        UPDATE #ToolInfo SET Balance = 0 WHERE Balance < 0
 
-        UPDATE #ToolInfo SET Balance=0 WHERE Balance<0
-        UPDATE #ToolInfo SET DurationMins=(ISNULL(Balance,0)*ISNULL(MesCT,0))/60
-        ------------------------------------------- ToolLife Summary （Add each Mac Top1 into Summary Table) ------------------------------------
-        DECLARE @RowNum INT=1
-        DECLARE @TotalRow INT
-        SET @TotalRow = (SELECT COUNT(DISTINCT MachineID) from #ToolInfo)
+        ------------------------------------------- Step 6: Tool Summary (Add each Mac Top1 into Summary Table) ------------------------------------
+        DECLARE @RowNum   INT = 1
+        DECLARE @TotalRow INT  = (SELECT COUNT(DISTINCT MachineId) FROM #ToolInfo)
 
         CREATE TABLE #ToolSummary (
-        MachineID NVARCHAR(18),
-        Location NVARCHAR(10),
-        MaterialCode NVARCHAR(40),
-        MaterialDesc NVARCHAR(40),
-        ToolingStation INT,
-        TotalCounter INT,
-        PresetCounter INT,
-        BalanceCounter INT,
-        DurationMins INT,
-        TechRequired BIT,
-        TechRequestMin INT,
-        MacErrorType INT,
-        MacLEDGreen BIT,
-        MacLEDYellow BIT,
-        MacLEDRed BIT,
-        MacStatus INT,
-        MacStopMins INT,
-        LoadPeak_Alm_L BIT,
-        LoadPeak_Warn_L BIT,
-        LoadPeak_Alm_R BIT,
-        LoadPeak_Warn_R BIT,
-        MacWithLED BIT,
+            MachineID       NVARCHAR(18),
+            Location        NVARCHAR(10),
+            MaterialCode    NVARCHAR(40),
+            MaterialDesc    NVARCHAR(40),
+            ToolingStation  INT,
+            TotalCounter    INT,
+            PresetCounter   INT,
+            BalanceCounter  INT,
+            DurationMins    INT,
+            TechRequired    BIT,
+            TechRequestMin  INT,
+            MacErrorType    INT,
+            MacLEDGreen     BIT,
+            MacLEDYellow    BIT,
+            MacLEDRed       BIT,
+            MacStatus       INT,
+            MacStopMins     INT,
+            LoadPeak_Alm_L  BIT,
+            LoadPeak_Warn_L BIT,
+            LoadPeak_Alm_R  BIT,
+            LoadPeak_Warn_R BIT,
+            MacWithLED      BIT
         )
 
         WHILE @RowNum <= @TotalRow
         BEGIN
-        INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-            ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0,0,0,0 
-        FROM #ToolInfo
-        WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
-        ORDER BY DurationMins
-        SET @RowNum= @RowNum+1
+            INSERT INTO #ToolSummary
+            SELECT TOP 1
+                MachineId, Location, MaterialCode, MaterialDescription,
+                ToolingStation, TotalCounter, PresetCounter, Balance, DurationMins,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            FROM #ToolInfo
+            WHERE MachineId NOT IN (SELECT MachineID FROM #ToolSummary)
+            ORDER BY DurationMins
+            SET @RowNum = @RowNum + 1
         END
 
-        ------------------------------------------- Special handle for Technician Call & LED (without mmTool data) - Start ------------------------------------
+        ------------------------------------------- Special handle: Machine without ToolLife (Tech Call only) - Start ------------------------------------
         -- 06/11/2025 Add in Machine without ToolLife information (Only for Technical Call Function)
         -- 11/11/2025 Add in Material information
         INSERT INTO #ToolSummary
-                SELECT MacInfo.InMacID,WC.MachineNo Location,MacInfo.pMatCode,MacInfo.pMatDesc,
-                9999,9999,9999,9999,9999,0,0,0,0,0,0,0,0,0,0,0,0,MacWithLED  
-        FROM KEPDATALOGGER.DBO.LogGetMatInfo MacInfo
-        JOIN MDM.DBO.WorkCenterMachineID WC ON MacInfo.InMacID=WC.MachineID
-        WHERE ID in (
-            SELECT MAX(id) FROM KEPDATALOGGER.DBO.LogGetMatInfo 
+        SELECT
+            MacInfo.InMacID,
+            WC.MachineNo        AS Location,
+            MacInfo.pMatCode,
+            MacInfo.pMatDesc,
+            9999, 9999, 9999, 9999, 9999,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            MacInfo.MacWithLED
+        FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo] MacInfo
+        JOIN [MDM].[dbo].[WorkCenterMachineID] WC
+            ON  MacInfo.InMacID = WC.MachineID
+            AND WC.Plant        = @Plant
+            AND WC.Dept         = 'MS'
+            AND WC.isActive     = 1
+            AND WC.DelFlag      = 0
+        WHERE MacInfo.ID IN (
+            SELECT MAX(ID)
+            FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]
             WHERE InMacID NOT IN (SELECT MachineID FROM #ToolSummary)
-            GROUP BY InMacID)
-        AND Plant=@Plant AND Dept='MS' AND isActive=1 AND DelFlag=0
-        ------------------------------------------- Special handle for Technician Call & LED (without mmTool data) - End ------------------------------------
-        ------------------------------------------- Technical Request Information ------------------------------------
+            GROUP BY InMacID
+        )
+        ------------------------------------------- Special handle: Machine without ToolLife - End ------------------------------------
+
+        ------------------------------------------- Step 7: Tech Request ------------------------------------
         DECLARE @ProdnShift INT
-        DECLARE @PrevDay INT
-        DECLARE @ProdnDate AS DATE
+        DECLARE @PrevDay    INT
+        DECLARE @ProdnDate  DATE
 
-        SELECT TOP 1 @ProdnShift=Shift,@PrevDay=CAST(PreviousDay AS INT) FROM mdm.dbo.TSHIFT
-        WHERE Plant=@Plant AND ISNULL(DelFlag,0)=0 AND CAST(getdate() AS TIME)
-        BETWEEN StartTime AND EndTime
-        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
+        SELECT TOP 1
+            @ProdnShift = Shift,
+            @PrevDay    = CAST(PreviousDay AS INT)
+        FROM [MDM].[dbo].[TSHIFT]
+        WHERE Plant = @Plant
+        AND ISNULL(DelFlag, 0) = 0
+        AND CAST(GETDATE() AS TIME) BETWEEN StartTime AND EndTime
 
-        SELECT DT.ID,Kep.MacID,DT.TechRequired,
-        DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin,
-        (CASE WHEN DTReason LIKE '%MHA%' THEN 2 ELSE 1 END) MacErrorType
-        INTO #DT FROM [SPLOEE].[dbo].[OEEDownTime] DT
-        LEFT OUTER JOIN [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep ON DT.ID=Kep.ID
-        WHERE Kep.ProdnDate=@ProdnDate AND Kep.ProdnShift=@ProdnShift
-        AND DT.TechRequired=1 AND DT.Status = 'OPEN'
+        SET @ProdnDate = DATEADD(d, -@PrevDay, CAST(GETDATE() AS DATE))
+
+        SELECT
+            Kep.MacID,
+            DT.TechRequired,
+            DATEDIFF(MINUTE,
+                CASE WHEN DT.UpdateDate IS NULL THEN DT.CreatedDate ELSE DT.UpdateDate END,
+                GETDATE()
+            ) AS TechRequestMin,
+            CASE WHEN DT.DTReason LIKE '%MHA%' THEN 2 ELSE 1 END AS MacErrorType
+        INTO #DT
+        FROM [SPLOEE].[dbo].[OEEDownTime] DT
+        LEFT JOIN [SPLOEE].[dbo].[OEEOutputKEP] Kep ON DT.ID = Kep.ID
+        WHERE Kep.ProdnDate = @ProdnDate
+        AND Kep.ProdnShift  = @ProdnShift
+        AND DT.TechRequired = 1
+        AND DT.Status       = 'OPEN'
         AND Kep.MacID IN (SELECT MachineID FROM #ToolSummary)
-        ORDER BY MacID DESC
 
         UPDATE #ToolSummary
-        SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0),
-        #ToolSummary.TechRequestMin=ISNULL(#DT.TechRequestMin,0),
-        #ToolSummary.MacErrorType=ISNULL(#DT.MacErrorType,0)
+        SET TechRequired   = ISNULL(D.TechRequired, 0),
+            TechRequestMin = ISNULL(D.TechRequestMin, 0),
+            MacErrorType   = ISNULL(D.MacErrorType, 0)
         FROM #ToolSummary
-        LEFT OUTER JOIN #DT ON #DT.MacID=#ToolSummary.MachineID
+        LEFT JOIN #DT D ON D.MacID = #ToolSummary.MachineID
 
-        -- ================================ MATERIAL CODE ========================
-        --SELECT MachineID,MaterialCode INTO #Session
-        --FROM [SPLOEE].[dbo].[Session] Session
-        --WHERE MachineID IN (SELECT MachineID FROM #ToolSummary)
-        --AND SessionStatus='RUNNING'
+        ------------------------------------------- Step 8: Machine LED & Status ------------------------------------
+        ;WITH CTE_Mac AS (
+            SELECT InMacID, MAX(ID) AS MaxID
+            FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]
+            WHERE InMacID IN (SELECT MachineID FROM #ToolSummary)
+            GROUP BY InMacID
+        )
+        SELECT
+            C.InMacID,
+            L.MacLEDGreen, L.MacLEDYellow, L.MacLEDRed, L.MacStatus,
+            L.LoadPeak_Alm_L, L.LoadPeak_Warn_L, L.LoadPeak_Alm_R, L.LoadPeak_Warn_R,
+            L.MacWithLED
+        INTO #MacInfo
+        FROM CTE_Mac C
+        LEFT JOIN [KEPDATALOGGER].[dbo].[LogGetMatInfo] L
+            ON L.InMacID = C.InMacID AND L.ID = C.MaxID
 
-        --UPDATE #ToolSummary SET
-        -- #ToolSummary.MaterialCode=#Session.MaterialCode,
-        -- #ToolSummary.MaterialDesc=#Session.MaterialDescription
-        --FROM #ToolSummary
-        --LEFT OUTER JOIN #Session ON #Session.MachineID=#ToolSummary.MachineID
-
-        ------------------------------------------- Machine Stop Duration ------------------------------------
-        --SELECT Kep.ID,Kep.ProdnDate,Kep.ProdnShift,Kep.MacID,Kep.RecordType, 
-        --DATEDIFF(MINUTE, (CASE WHEN Kep.RecordType='STOP' THEN Kep.StartTime ELSE GetDate() END), GetDate()) AS MacStopMin
-        --INTO #MacStatus
-        --FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep
-        --JOIN (SELECT MAX(ID) ID, Macid FROM [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep2 
-        --        WHERE Kep2.ProdnDate=@ProdnDate AND Kep2.ProdnShift=@ProdnShift
-        --        Group By Macid) AS Kep2 ON (Kep.ID = Kep2.ID)
-
-        ------------------------------------------- Machine Status (LED + Status) ------------------------------------
-        ;WITH CTE1 AS (
-        SELECT DISTINCT MacInfo.InMacID, MAX(MacInfo.ID) AS MaxID
-        FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo] MacInfo
-        WHERE MacInfo.InMacID IN (SELECT MachineID FROM #ToolSummary)
-        -- WHERE MacInfo.InMacID IN ('MSNLTH09-29','MSNLTH13-11')
-        GROUP BY MacInfo.InMacID)
-        SELECT CTE1.*,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
-        LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R,MacWithLED
-        INTO #MacInfo FROM CTE1
-        LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
-                        LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R,MacWithLED
-                FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
-        ON R1.InMacID = CTE1.InMacID and R1.ID = CTE1.MaxID;
-
-        UPDATE #ToolSummary SET
-        #ToolSummary.MacWithLED=ISNULL(#MacInfo.MacWithLED,0),
-        #ToolSummary.MacLEDGreen=ISNULL(#MacInfo.MacLEDGreen,0),
-        #ToolSummary.MacLEDYellow=ISNULL(#MacInfo.MacLEDYellow,0),
-        #ToolSummary.MacLEDRed=ISNULL(#MacInfo.MacLEDRed,0),
-        #ToolSummary.MacStatus=ISNULL(#MacInfo.MacStatus,0),
-        #ToolSummary.LoadPeak_Alm_L=ISNULL(#MacInfo.LoadPeak_Alm_L,0),
-        #ToolSummary.LoadPeak_Warn_L=ISNULL(#MacInfo.LoadPeak_Warn_L,0),
-        #ToolSummary.LoadPeak_Alm_R=ISNULL(#MacInfo.LoadPeak_Alm_R,0),
-        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0)
+        UPDATE #ToolSummary
+        SET MacWithLED      = ISNULL(M.MacWithLED, 0),
+            MacLEDGreen     = ISNULL(M.MacLEDGreen, 0),
+            MacLEDYellow    = ISNULL(M.MacLEDYellow, 0),
+            MacLEDRed       = ISNULL(M.MacLEDRed, 0),
+            MacStatus       = ISNULL(M.MacStatus, 0),
+            LoadPeak_Alm_L  = ISNULL(M.LoadPeak_Alm_L, 0),
+            LoadPeak_Warn_L = ISNULL(M.LoadPeak_Warn_L, 0),
+            LoadPeak_Alm_R  = ISNULL(M.LoadPeak_Alm_R, 0),
+            LoadPeak_Warn_R = ISNULL(M.LoadPeak_Warn_R, 0)
         FROM #ToolSummary
-        LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
+        LEFT JOIN #MacInfo M ON M.InMacID = #ToolSummary.MachineID
 
-        ------------------------------------------- Special handle for Technician Call & LED (without mmTool data) - Start ------------------------------------
+        ------------------------------------------- Special handle: No LED machine, MacStatus=3 force Green ------------------------------------
         -- 06/11/2025 Add in Machine without ToolLife information (Only for Technical Call Function)
-        UPDATE #ToolSummary SET MacLEDGreen=1,MacLEDRed=0,MacLEDYellow=0 
-        WHERE MacStatus=3 AND MacWithLED=0
+        UPDATE #ToolSummary
+        SET MacLEDGreen  = 1,
+            MacLEDRed    = 0,
+            MacLEDYellow = 0
+        WHERE MacStatus = 3
+        AND MacWithLED  = 0
 
-        -- UPDATE #ToolSummary SET MacLEDRed=1,MacLEDGreen=0,MacLEDYellow=0 
+        -- UPDATE #ToolSummary SET MacLEDRed=1,MacLEDGreen=0,MacLEDYellow=0
         -- WHERE MacStatus=0 AND MacWithLED=0
-        ------------------------------------------- Special handle for Technician Call & LED (without mmTool data) - End ------------------------------------
 
-        SELECT TS.*,LG.EmpNo,LG.EmpName FROM #ToolSummary TS
-        LEFT OUTER JOIN SPLOEE.DBO.LOGIN LG ON LG.MacID = TS.MachineID AND LG.Status='ONLINE' AND LG.Dept='MS' AND LG.EmpType='OPERATOR'
-        ORDER BY 
-        -- CASE WHEN MaterialCode IS NULL THEN 1 ELSE 0 END, 
-        MacLEDRed DESC,MacLEDYellow DESC,TechRequired desc,MacLEDGreen desc,DurationMins
+        ------------------------------------------- Final Output ------------------------------------
+        SELECT
+            TS.*,
+            LG.EmpNo,
+            LG.EmpName
+        FROM #ToolSummary TS
+        LEFT JOIN [SPLOEE].[dbo].[LOGIN] LG
+            ON  LG.MacID    = TS.MachineID
+            AND LG.Status   = 'ONLINE'
+            AND LG.Dept     = 'MS'
+            AND LG.EmpType  = 'OPERATOR'
+        ORDER BY
+            MacLEDRed    DESC,
+            MacLEDYellow DESC,
+            TechRequired DESC,
+            MacLEDGreen  DESC,
+            DurationMins
 
-        -- ToolLife data detail with Predict value
-        --SELECT
-        --Location, ToolingMainCategory AS [Turret], #ToolInfo.ToolingStation AS [Tool], ToolingSubCategory AS [Process], 
-        --DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], 
-        --#ToolInfo.MachineID, #ToolInfo.ToolNoID,#ToolInfo.StartDate,
-        --TotalCounter,PresetCounter,TLP.ToolLife_predicted,TLP.features_supporting_high_prediction,
-        --LoadX_Alm,LoadZ_Alm,mmToolID
-        --FROM #ToolInfo
-        --LEFT OUTER JOIN ToolLifePrediction TLP 
-        --    ON TLP.MachineId=#ToolInfo.MachineId 
-        --    AND TLP.Turret=#ToolInfo.ToolingMainCategory
-        --    AND TLP.ToolingStation=#ToolInfo.ToolingStation
-        --ORDER BY Location, DurationMins
-
-        DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo,#ToolSummary,#DT,#MacInfo --,#MacStatus
-
-
+        DROP TABLE #ToolLife, #Session, #WCMachineID, #ToolInfo, #ToolSummary, #DT, #MacInfo
         '''
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(query, conn, params=(plant_code,))
         conn.close()
 
     else:
@@ -355,200 +415,270 @@ def load_data(limit: int = 1000):
     return df
 
 # get tool data (all)
-def load_data_all():
+def load_data_all(plant_code: int = 2100):
     if not DEMO_MODE:
         conn = get_db_connection()
-        query = f'''
+        query = '''
+        SET NOCOUNT ON
         SET NOCOUNT ON
         SET ANSI_WARNINGS OFF
         ;
 
-        DECLARE @Plant INT=2100
-        ------------------------------------------- ToolCounter ------------------------------------
-        SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, TL.IsActiveTool,
-        DATEADD(HOUR, 8, TL.StartDate) AS StartDate, GetDate() CompletedDate,TN.ToolPieces,
-        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        ISNULL(mmTool.PresetCounter,0)PresetCounter,
-        mmTool.LoadX_Alm,mmTool.LoadZ_Alm,mmTool.UnitPrice
-        INTO #ToolLife FROM ToolLife TL
-        INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        ON TL.ToolNoId=TN.Id
-        WHERE TN.MachineID LIKE 'MS%'
-        AND TL.IsActiveTool=1
-        ORDER BY MACHINEID,SAPCode DESC
+        DECLARE @Plant INT
+        SET @Plant = ?
 
-        --SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
-        --TL.StartDate, TL.CompletedDate,TN.ToolPieces,
-        --mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        --ISNULL(mmTool.PresetCounter,0)PresetCounter
-        --INTO #ToolLifeHist FROM ToolLifeHistory TL
-        --INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        --ON TL.ToolNoId=TN.Id
-        --WHERE TL.ToolNoId IN (SELECT ToolNoID FROM #ToolLife)
-        --ORDER BY MACHINEID,SAPCode DESC
+        ------------------------------------------- Step 1: Tool Life Data ------------------------------------
+        -- ToolMaterialMachine 的 Unique Key: Plant + ToolNo + Material + MachineID + ToolingStation + Remark1
+        -- 必须加上 ToolLife.Material = TMM.Material 才能 1:1 对应，避免数据乘数膨胀
 
-        --INSERT INTO #ToolLife SELECT * FROM #ToolLifeHist
-        -- drop table #ToolLife,#ToolLifeHist
+        SELECT
+            TL.Id                                       AS ToolLifeId,
+            TL.ToolNoID,
+            TN.MachineId,
+            TN.ToolCode,
+            TN.ToolingStation,
+            ISNULL(TMM.Remark1, TN.Remark1)             AS ToolingMainCategory,
+            ISNULL(TMM.Remark2, TN.Remark2)             AS ToolingSubCategory,
+            TL.TotalCounter,
+            ISNULL(TL.PresetCounter, 0)                 AS PresetCounter,
+            (ISNULL(TL.PresetCounter, 0) - TL.TotalCounter) AS Balance,
+            DATEADD(HOUR, 8, TL.StartDate)              AS StartDate,
+            T.ToolNo                                    AS mmToolID,
+            VM.CostPerUOM                               AS UnitPrice,
+            0                                           AS LoadX_Alm,
+            0                                           AS LoadZ_Alm
+        INTO #ToolLife
+        FROM [SPLOEELOT].[dbo].[ToolLife] TL
+        INNER JOIN [SPLOEELOT].[dbo].[ToolNo] TN
+            ON TL.ToolNoID = TN.Id
+            AND ISNULL(TN.Delflag, 0) = 0
+        INNER JOIN [MDM].[dbo].[TTOOL] T
+            ON TN.ToolCode = T.ToolNo
+            AND T.Plant    = @Plant
+            AND ISNULL(T.DelFlag, 0) = 0
+        -- Material from ToolLife matched to ToolMaterialMachine to prevent row multiplication
+        LEFT JOIN [MDM].[dbo].[ToolMaterialMachine] TMM
+            ON  TMM.ToolNo      = TN.ToolCode
+            AND TMM.MachineID   = TN.MachineId
+            AND TMM.Material    = TL.Material
+            AND TMM.ToolingStation = TN.ToolingStation
+            AND TMM.Remark1 = TN.Remark1
+            AND TMM.Remark2 = TN.Remark2
+            AND TMM.Plant       = @Plant
+            AND TMM.IsDeleted   = 0
+        -- Latest price from TOOLVSMAKER (no ValidTo, use most recent ValidFrom)
+        LEFT JOIN (
+            SELECT Plant, ToolNo, CostPerUOM,
+                ROW_NUMBER() OVER (PARTITION BY Plant, ToolNo ORDER BY ValidFrom DESC) AS rn
+            FROM [MDM].[dbo].[TOOLVSMAKER]
+            WHERE IsDeleted = 0
+        ) VM
+            ON  VM.ToolNo = TN.ToolCode
+            AND VM.Plant  = @Plant
+            AND VM.rn     = 1
+        WHERE TN.MachineId LIKE 'MS%'
+        AND TL.IsActiveTool = 1
+        AND ISNULL(TL.Delflag, 0) = 0
 
-        ------------------------------------------- Material & Machine Information ------------------------------------
-        SELECT Plant, MachineID, Dept, MaterialCode, MaterialDescription, MesCT
-        INTO #Session  FROM [SPLOEE].[dbo].[Session]
-        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
-        AND SessionStatus='RUNNING' AND Plant=@Plant
+        -- DROP TABLE #ToolLife
+        -- select * from #ToolLife
+        ------------------------------------------- Step 2: Session (MesCT, Material) ------------------------------------
+        SELECT MachineID, MesCT, MaterialCode, MaterialDescription
+        INTO #Session
+        FROM [SPLOEE].[dbo].[Session]
+        WHERE MachineID IN (SELECT DISTINCT MachineId FROM #ToolLife)
+        AND SessionStatus = 'RUNNING'
+        AND Plant = CAST(@Plant AS NVARCHAR)
 
-        SELECT Plant,Dept,MachineID,MachineNo Location
-        INTO #WCMachineID FROM [MDM].[dbo].[WorkCenterMachineID]
-        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
-        AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
+        ------------------------------------------- Step 3: Machine Location ------------------------------------
+        SELECT MachineID, MachineNo AS Location
+        INTO #WCMachineID
+        FROM [MDM].[dbo].[WorkCenterMachineID]
+        WHERE MachineID IN (SELECT DISTINCT MachineId FROM #ToolLife)
+        AND DelFlag  = 0
+        AND isActive = 1
+        AND Plant    = @Plant
+        
+        ------------------------------------------- Step 4: Combine into ToolInfo ------------------------------------
+        SELECT
+            TL.ToolNoID,
+            TL.MachineId,
+            TL.ToolingStation,
+            TL.ToolingMainCategory,
+            TL.ToolingSubCategory,
+            TL.TotalCounter,
+            TL.PresetCounter,
+            CASE WHEN TL.Balance < 0 THEN 0 ELSE TL.Balance END    AS Balance,
+            TL.StartDate,
+            TL.mmToolID,
+            TL.LoadX_Alm,
+            TL.LoadZ_Alm,
+            TL.UnitPrice,
+            S.MesCT,
+            S.MaterialCode,
+            S.MaterialDescription,
+            W.Location,
+            CASE
+                WHEN TL.Balance <= 0 THEN 0
+                ELSE CONVERT(INT, (TL.Balance * ISNULL(S.MesCT, 0)) / 60) 
+            END                                                     AS DurationMins
+        INTO #ToolInfo
+        FROM #ToolLife TL
+        LEFT JOIN #Session     S ON S.MachineID = TL.MachineId
+        LEFT JOIN #WCMachineID W ON W.MachineID = TL.MachineId
 
-        ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,SUM(TotalCounter) TotalCounter,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm,mmToolID,UnitPrice
-        INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,PresetCounter,StartDate,LoadX_Alm,LoadZ_Alm,mmToolID,UnitPrice
-        ORDER BY MachineID,ToolingMainCategory,ToolingStation
+        ------------------------------------------- Step 5: Muratec ToolCount Override ------------------------------------
+        --UPDATE TI
+        --SET
+        --    TI.PresetCounter = TC.ToolSetPoint,
+        --    TI.Balance       = TC.ToolBalance,
+        --    TI.TotalCounter  = TC.ToolQty,
+        --    TI.DurationMins  = CASE
+        --                           WHEN TC.ToolBalance <= 0 THEN 0
+        --                           ELSE (TC.ToolBalance * ISNULL(TI.MesCT, 0)) / 60
+        --                       END
+        --FROM #ToolInfo TI
+        --INNER JOIN ToolCount TC
+        --    ON  TC.MacID        = TI.MachineId
+        --    AND TC.MainCategory = TI.ToolingMainCategory
+        --    AND TC.ToolStation  = TI.ToolingStation
 
-        SELECT #TL.*,(#TL.PresetCounter-#TL.TotalCounter) Balance, 
-        #Session.MesCT,#Session.MaterialCode,#Session.MaterialDescription,
-        #WCMachineID.Location,0 DurationMins
-        INTO #ToolInfo FROM #TL
-        LEFT OUTER JOIN #Session ON #TL.MachineID=#Session.MachineID
-        LEFT OUTER JOIN #WCMachineID ON #TL.MachineID=#WCMachineID.MachineID
+        UPDATE #ToolInfo SET Balance = 0 WHERE Balance < 0
 
-        ------------------------------------------- Revise ToolCounter (Muratec Data) 27/06/25 ------------------------------------
-        UPDATE TI 
-        SET 
-            TI.PresetCounter = TC.ToolSetPoint,
-            TI.Balance = TC.ToolBalance,
-            TI.TotalCounter = TC.ToolQty
-        FROM 
-            #ToolInfo TI 
-        INNER JOIN ToolCount TC ON 
-            TI.MachineID = TC.MacID
-            AND TI.ToolingMainCategory = TC.MainCategory
-            AND TI.ToolingStation = TC.ToolStation
-
-        UPDATE #ToolInfo SET Balance=0 WHERE Balance<0
-        UPDATE #ToolInfo SET DurationMins=(ISNULL(Balance,0)*ISNULL(MesCT,0))/60
-        ------------------------------------------- ToolLife Summary ------------------------------------
-        DECLARE @RowNum INT=1
-        DECLARE @TotalRow INT
-        SET @TotalRow = (SELECT COUNT(DISTINCT MachineID) from #ToolInfo)
+        ------------------------------------------- Step 6: Tool Summary (for LED/Status) ------------------------------------
+        DECLARE @RowNum   INT = 1
+        DECLARE @TotalRow INT  = (SELECT COUNT(DISTINCT MachineId) FROM #ToolInfo)
 
         CREATE TABLE #ToolSummary (
-        MachineID NVARCHAR(18),
-        Location NVARCHAR(10),
-        MaterialCode NVARCHAR(40),
-        MaterialDesc NVARCHAR(40),
-        ToolingStation INT,
-        TotalCounter INT,
-        PresetCounter INT,
-        BalanceCounter INT,
-        DurationMins INT,
-        TechRequired BIT,
-        TechRequestMin INT,
-        MacLEDGreen BIT,
-        MacLEDYellow BIT,
-        MacLEDRed BIT,
-        MacStatus INT,
-        LoadPeak_Alm_L BIT,
-        LoadPeak_Warn_L BIT,
-        LoadPeak_Alm_R BIT,
-        LoadPeak_Warn_R BIT,
+            MachineID       NVARCHAR(18),
+            Location        NVARCHAR(10),
+            MaterialCode    NVARCHAR(40),
+            MaterialDesc    NVARCHAR(40),
+            ToolingStation  INT,
+            TotalCounter    INT,
+            PresetCounter   INT,
+            BalanceCounter  INT,
+            DurationMins    INT,
+            TechRequired    BIT,
+            TechRequestMin  INT,
+            MacLEDGreen     BIT,
+            MacLEDYellow    BIT,
+            MacLEDRed       BIT,
+            MacStatus       INT,
+            LoadPeak_Alm_L  BIT,
+            LoadPeak_Warn_L BIT,
+            LoadPeak_Alm_R  BIT,
+            LoadPeak_Warn_R BIT
         )
 
         WHILE @RowNum <= @TotalRow
         BEGIN
-            INSERT INTO #ToolSummary SELECT TOP 1 MachineID,Location,MaterialCode,MaterialDescription,
-                ToolingStation,TotalCounter,PresetCounter,Balance,DurationMins,0,0,0,0,0,0,0,0,0,0 
+            INSERT INTO #ToolSummary
+            SELECT TOP 1
+                MachineId, Location, MaterialCode, MaterialDescription,
+                ToolingStation, TotalCounter, PresetCounter, Balance, DurationMins,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0
             FROM #ToolInfo
-            WHERE MachineID NOT IN (SELECT MachineID FROM #ToolSummary)
+            WHERE MachineId NOT IN (SELECT MachineID FROM #ToolSummary)
             ORDER BY DurationMins
-            SET @RowNum= @RowNum+1
+            SET @RowNum = @RowNum + 1
         END
 
-        ------------------------------------------- Technical Request Information ------------------------------------
+        ------------------------------------------- Step 7: Tech Request ------------------------------------
         DECLARE @ProdnShift INT
-        DECLARE @PrevDay INT
-        DECLARE @ProdnDate AS DATE
+        DECLARE @PrevDay    INT
+        DECLARE @ProdnDate  DATE
 
-        SELECT TOP 1 @ProdnShift=Shift,@PrevDay=CAST(PreviousDay AS INT) FROM mdm.dbo.TSHIFT
-        WHERE Plant=@Plant AND ISNULL(DelFlag,0)=0 AND CAST(getdate() AS TIME)
-        BETWEEN StartTime AND EndTime
-        SET @ProdnDate = DATEADD(d,-@PrevDay,CAST(getdate() AS DATE))
+        SELECT TOP 1
+            @ProdnShift = Shift,
+            @PrevDay    = CAST(PreviousDay AS INT)
+        FROM [MDM].[dbo].[TSHIFT]
+        WHERE Plant = @Plant
+        AND ISNULL(DelFlag, 0) = 0
+        AND CAST(GETDATE() AS TIME) BETWEEN StartTime AND EndTime
 
-        SELECT DT.ID,Kep.MacID,DT.TechRequired,
-        DATEDIFF(MINUTE, (CASE WHEN UpdateDate IS NULL THEN CreatedDate ELSE UpdateDate END), GetDate()) AS TechRequestMin
-        INTO #DT FROM [SPLOEE].[dbo].[OEEDownTime] DT
-        LEFT OUTER JOIN [SPLOEE].[dbo].[OEEOUTPUTKEP] Kep ON DT.ID=Kep.ID
-        WHERE Kep.ProdnDate=@ProdnDate AND Kep.ProdnShift=@ProdnShift
-        AND DT.TechRequired=1
-        AND Kep.MacID IN (SELECT MachineID FROM #ToolSummary)
-        ORDER BY MacID DESC
-
-        UPDATE #ToolSummary
-        SET #ToolSummary.TechRequired=ISNULL(#DT.TechRequired,0),
-            #ToolSummary.TechRequestMin=ISNULL(#DT.TechRequestMin,0)
-        FROM #ToolSummary
-        LEFT OUTER JOIN #DT ON #DT.MacID=#ToolSummary.MachineID
-
-
-        -- ================================ MATERIAL CODE ========================
-        --SELECT MachineID,MaterialCode INTO #Session
-        --FROM [SPLOEE].[dbo].[Session] Session
-        --WHERE MachineID IN (SELECT MachineID FROM #ToolSummary)
-        --AND SessionStatus='RUNNING'
-
-        --UPDATE #ToolSummary SET
-        -- #ToolSummary.MaterialCode=#Session.MaterialCode,
-        -- #ToolSummary.MaterialDesc=#Session.MaterialDescription
-        --FROM #ToolSummary
-        --LEFT OUTER JOIN #Session ON #Session.MachineID=#ToolSummary.MachineID
-
-        ------------------------------------------- Machine Status (LED + Status) ------------------------------------
-        ;WITH CTE1 AS (
-        SELECT DISTINCT MacInfo.InMacID, MAX(MacInfo.ID) AS MaxID
-        FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo] MacInfo
-        WHERE MacInfo.InMacID IN (SELECT MachineID FROM #ToolSummary)
-        -- WHERE MacInfo.InMacID IN ('MSNLTH09-29','MSNLTH13-11')
-        GROUP BY MacInfo.InMacID)
-        SELECT CTE1.*,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
-        LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
-        INTO #MacInfo FROM CTE1
-        LEFT JOIN (SELECT ID, InMacID,MacLEDGreen,MacLEDYellow,MacLEDRed,MacStatus,
-                          LoadPeak_Alm_L,LoadPeak_Warn_L,LoadPeak_Alm_R,LoadPeak_Warn_R 
-                   FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]) AS R1
-        ON R1.InMacID = CTE1.InMacID and R1.ID = CTE1.MaxID;
-
-        UPDATE #ToolSummary SET
-        #ToolSummary.MacLEDGreen=ISNULL(#MacInfo.MacLEDGreen,0),
-        #ToolSummary.MacLEDYellow=ISNULL(#MacInfo.MacLEDYellow,0),
-        #ToolSummary.MacLEDRed=ISNULL(#MacInfo.MacLEDRed,0),
-        #ToolSummary.MacStatus=ISNULL(#MacInfo.MacStatus,0),
-        #ToolSummary.LoadPeak_Alm_L=ISNULL(#MacInfo.LoadPeak_Alm_L,0),
-        #ToolSummary.LoadPeak_Warn_L=ISNULL(#MacInfo.LoadPeak_Warn_L,0),
-        #ToolSummary.LoadPeak_Alm_R=ISNULL(#MacInfo.LoadPeak_Alm_R,0),
-        #ToolSummary.LoadPeak_Warn_R=ISNULL(#MacInfo.LoadPeak_Warn_R,0)
-        FROM #ToolSummary
-        LEFT OUTER JOIN #MacInfo ON #MacInfo.InMacID=#ToolSummary.MachineID
+        SET @ProdnDate = DATEADD(d, -@PrevDay, CAST(GETDATE() AS DATE))
 
         SELECT
-        Location, ToolingMainCategory AS [Turret], #ToolInfo.ToolingStation AS [Tool], ToolingSubCategory AS [Process], 
-        DurationMins AS [Balance (mins)], Balance AS [Balance (pcs)], 
-        #ToolInfo.MachineID, #ToolInfo.ToolNoID,#ToolInfo.StartDate,
-        TotalCounter,PresetCounter,TLP.ToolLife_predicted,TLP.Segment_Based_Explanation_md,
-        LoadX_Alm,LoadZ_Alm,mmToolID,MesCT,UnitPrice
-        FROM #ToolInfo
-        LEFT OUTER JOIN ToolLifePrediction TLP 
-            ON TLP.MachineId=#ToolInfo.MachineId 
-            AND TLP.Turret=#ToolInfo.ToolingMainCategory
-            AND TLP.ToolingStation=#ToolInfo.ToolingStation
-            AND TLP.IsLatestPrediction = 1
-        ORDER BY Location, DurationMins
+            Kep.MacID,
+            DT.TechRequired,
+            DATEDIFF(MINUTE,
+                CASE WHEN DT.UpdateDate IS NULL THEN DT.CreatedDate ELSE DT.UpdateDate END,
+                GETDATE()
+            ) AS TechRequestMin
+        INTO #DT
+        FROM [SPLOEE].[dbo].[OEEDownTime] DT
+        LEFT JOIN [SPLOEE].[dbo].[OEEOutputKEP] Kep ON DT.ID = Kep.ID
+        WHERE Kep.ProdnDate = @ProdnDate
+        AND Kep.ProdnShift  = @ProdnShift
+        AND DT.TechRequired = 1
+        AND Kep.MacID IN (SELECT MachineID FROM #ToolSummary)
 
-        DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo,#ToolSummary,#DT,#MacInfo
-        --DROP TABLE #DT,#MacInfo 
+        UPDATE #ToolSummary
+        SET TechRequired   = ISNULL(D.TechRequired, 0),
+            TechRequestMin = ISNULL(D.TechRequestMin, 0)
+        FROM #ToolSummary
+        LEFT JOIN #DT D ON D.MacID = #ToolSummary.MachineID
+
+        ------------------------------------------- Step 8: Machine LED & Status ------------------------------------
+        ;WITH CTE_Mac AS (
+            SELECT InMacID, MAX(ID) AS MaxID
+            FROM [KEPDATALOGGER].[dbo].[LogGetMatInfo]
+            WHERE InMacID IN (SELECT MachineID FROM #ToolSummary)
+            GROUP BY InMacID
+        )
+        SELECT
+            C.InMacID,
+            L.MacLEDGreen, L.MacLEDYellow, L.MacLEDRed, L.MacStatus,
+            L.LoadPeak_Alm_L, L.LoadPeak_Warn_L, L.LoadPeak_Alm_R, L.LoadPeak_Warn_R
+        INTO #MacInfo
+        FROM CTE_Mac C
+        LEFT JOIN [KEPDATALOGGER].[dbo].[LogGetMatInfo] L
+            ON L.InMacID = C.InMacID AND L.ID = C.MaxID
+
+        UPDATE #ToolSummary
+        SET MacLEDGreen     = ISNULL(M.MacLEDGreen, 0),
+            MacLEDYellow    = ISNULL(M.MacLEDYellow, 0),
+            MacLEDRed       = ISNULL(M.MacLEDRed, 0),
+            MacStatus       = ISNULL(M.MacStatus, 0),
+            LoadPeak_Alm_L  = ISNULL(M.LoadPeak_Alm_L, 0),
+            LoadPeak_Warn_L = ISNULL(M.LoadPeak_Warn_L, 0),
+            LoadPeak_Alm_R  = ISNULL(M.LoadPeak_Alm_R, 0),
+            LoadPeak_Warn_R = ISNULL(M.LoadPeak_Warn_R, 0)
+        FROM #ToolSummary
+        LEFT JOIN #MacInfo M ON M.InMacID = #ToolSummary.MachineID
+
+        ------------------------------------------- Final Output ------------------------------------
+        SELECT
+            TI.Location,
+            TI.ToolingMainCategory              AS [Turret],
+            TI.ToolingStation                   AS [Tool],
+            TI.ToolingSubCategory               AS [Process],
+            TI.DurationMins                     AS [Balance (mins)],
+            TI.Balance                          AS [Balance (pcs)],
+            TI.MachineId                        AS MachineID,
+            TI.ToolNoID,
+            TI.StartDate,
+            TI.TotalCounter,
+            TI.PresetCounter,
+            TLP.ToolLife_predicted,
+            TLP.Segment_Based_Explanation_md,
+            TI.LoadX_Alm,
+            TI.LoadZ_Alm,
+            TI.mmToolID,
+            TI.MesCT,
+            TI.UnitPrice
+        FROM #ToolInfo TI
+        LEFT JOIN [SPLOEELOT].[dbo].[ToolLifePrediction] TLP
+            ON  TLP.MachineId          = TI.MachineId
+            AND TLP.Turret             = TI.ToolingMainCategory
+            AND TLP.ToolingStation     = TI.ToolingStation
+            AND TLP.IsLatestPrediction = 1
+        ORDER BY TI.Location, TI.DurationMins
+
+        DROP TABLE #ToolLife, #Session, #WCMachineID, #ToolInfo, #ToolSummary, #DT, #MacInfo
         '''
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(query, conn, params=(plant_code,))
         conn.close()
 
     else:
@@ -733,6 +863,7 @@ def get_questdb_data(Position,StartDate, ToolingStation, MacID):
             and Run = 3"""
     StartDate = StartDate.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
     params = {"StartDate": StartDate, "ToolingStation": int(str(ToolingStation)[0]), "MacID": MacID, "Turret": Position}
+    print(params)
     with engine.connect() as conn:
         df = pd.read_sql(text(QuestDbQuery), conn, params=params)
     return df
@@ -839,15 +970,15 @@ def merge_OT_DataLake_Questdb(MachineName, Position, ToolingStation,StartDate, A
     #     CurrentToolCountNQuestdbdf['percent_diff'] = abs(CurrentToolCountNQuestdbdf['SpdlSpd_RPM'] - CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP']) / CurrentToolCountNQuestdbdf['SpdlSpd_RPM_SP'] * 100
     #     CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf['percent_diff'] <= 2]
     AlarmFilter = AlarmFilter*1.1 # add 10% buffer to alarm filter
-    CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[AlarmColumn] <= AlarmFilter]
+    # CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[AlarmColumn] <= AlarmFilter]
     CurrentToolCountNQuestdbdf=CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[AlarmColumn] >0]
 
 
     #CurrentToolCountNQuestdbdf = CurrentToolCountNQuestdbdf[CurrentToolCountNQuestdbdf[selectedColumn]<=CutOffValue]
-
+    print(CurrentToolCountNQuestdbdf)
     return CurrentToolCountNQuestdbdf
 
-def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDate):
+def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDate, plant_code: int = 2100):
     if not DEMO_MODE:
         conn = get_db_connection()
         query = f'''
@@ -855,7 +986,8 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         SET ANSI_WARNINGS OFF
         ;
 
-        DECLARE @Plant INT=2100
+        DECLARE @Plant INT
+        SET @Plant = ?
         DECLARE @sDate DateTime, @eDate DateTime
         DECLARE @MacID AS NVARCHAR(18)
         DECLARE @MainCategory AS NVARCHAR(10)
@@ -868,16 +1000,16 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         SET @MainCategory='{Position}'
         SET @ToolStation={ToolingStation}
         ------------------------------------------- ToolCounter ------------------------------------
-        SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter,
+        SELECT TL.ToolNoID,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter,
         DATEADD(HOUR, 8, TL.StartDate) AS StartDate, DATEADD(HOUR, 8, TL.CompletedDate) AS CompletedDate,TN.ToolPieces,
         mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
         ISNULL(mmTool.PresetCounter,0)PresetCounter,
         mmTool.LoadX_Alm,mmTool.LoadZ_Alm
         INTO #ToolLife FROM ToolLifeHistory TL
         INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        ON TL.ToolNoId=TN.Id
+        ON TL.ToolNoID=TN.Id
         WHERE TN.MachineID LIKE 'MS%'
-        AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
+        AND TL.ToolNoID NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
         AND TN.MachineId=@MacID
         AND mmTool.ToolingMainCategory=@MainCategory
         AND mmTool.ToolingStation=@ToolStation
@@ -885,14 +1017,14 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         AND TL.Delflag = 0
         ORDER BY MACHINEID,SAPCode DESC
 
-        --SELECT TL.ToolNoId,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
+        --SELECT TL.ToolNoID,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
         --TL.StartDate, TL.CompletedDate,TN.ToolPieces,
         --mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
         --ISNULL(mmTool.PresetCounter,0)PresetCounter
         --INTO #ToolLifeHist FROM ToolLifeHistory TL
         --INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        --ON TL.ToolNoId=TN.Id
-        --WHERE TL.ToolNoId IN (SELECT ToolNoID FROM #ToolLife)
+        --ON TL.ToolNoID=TN.Id
+        --WHERE TL.ToolNoID IN (SELECT ToolNoID FROM #ToolLife)
         --ORDER BY MACHINEID,SAPCode DESC
 
         --INSERT INTO #ToolLife SELECT * FROM #ToolLifeHist
@@ -931,7 +1063,7 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
 
         DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo
         '''
-        df = pd.read_sql(query, conn)
+        df = pd.read_sql(query, conn, params=(plant_code,))
         conn.close()
     else:
         data_demo = {'Location': ['FMC9','FMC9','FMC9'],
@@ -970,7 +1102,7 @@ def get_KPI_Data(MachineName = None, All_period = False):
         ,MAX(TL.CreatedDate) OVER (PARTITION BY ToolNoID) AS [EOLDate]
         FROM ToolLifeHistory TL
         inner JOIN (ToolNo TN inner JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        ON TL.ToolNoId=TN.Id
+        ON TL.ToolNoID=TN.Id
         LEFT JOIN SPLOEE.DBO.OEEDownTime DT ON TL.OEEOutputKepID = DT.ID
 
         WHERE 1=1
@@ -978,10 +1110,10 @@ def get_KPI_Data(MachineName = None, All_period = False):
         {period}
         AND TL.CreatedDate >= '2025-06-01 00:00:00.000'  --AUTO CHANGE TOOL GO LIVE
         AND TL.CreatedDate NOT BETWEEN '2025/06/01' and '2025/06/02'
-        AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
-        AND TL.ToolNoId NOT IN  (5649,5671,5652,5651) -- Testing Data 
+        AND TL.ToolNoID NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
+        AND TL.ToolNoID NOT IN  (5649,5671,5652,5651) -- Testing Data 
         AND TL.TotalCounter > mmTool.PresetCounter * 0.2
-        AND TL.ToolNoId NOT IN (SELECT ToolNoId FROM ToolLifeHistory WHERE TotalCounter<0) --DROP DATA DUE TO MACHINE SIDE COUNTER RESET
+        AND TL.ToolNoID NOT IN (SELECT ToolNoID FROM ToolLifeHistory WHERE TotalCounter<0) --DROP DATA DUE TO MACHINE SIDE COUNTER RESET
         AND ISNULL(TL.Delflag,0) = 0
 
         )
