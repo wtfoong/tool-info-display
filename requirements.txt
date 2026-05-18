@@ -8,5 +8,5 @@ sqlalchemy
 scipy
 psycopg2
 plotly
-streamlit-extras
+streamlit-extras>=1.5.0
 scikit-learn
