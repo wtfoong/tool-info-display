@@ -680,10 +680,12 @@ def DetailNFullInfoUI(filtered_df):
                     #cols = st.columns([1, 1, 2, 1, 1,1,1, 1,1,1])  # Adjust column widths
                     cols = st.columns([1, 1, 2, 1, 1,1,1, 1])  # Adjust column widths
 
-                    cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True, help = savingText if highlight else None)
+                    # cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True, help = savingText if highlight else None)
+                    cols[0].markdown(f"<div style='{style}'>{row['Turret']}</div>", unsafe_allow_html=True)
                     cols[1].markdown(f"<div style='{style}'>{row['Tool']} ({row['ToolNoID']})</div>", unsafe_allow_html=True)
                     cols[2].markdown(f"<div>{row['Process']} - {row['mmToolID']}</div>", unsafe_allow_html=True)
-                    cols[3].markdown(f"<div>{row['ToolLife_predicted_final']}</div>", unsafe_allow_html=True,help= None if row['ToolLife_predicted_final'] == '-' else row['Segment_Based_Explanation_md'])
+                    # cols[3].markdown(f"<div>{row['ToolLife_predicted_final']}</div>", unsafe_allow_html=True,help= None if row['ToolLife_predicted_final'] == '-' else row['Segment_Based_Explanation_md'])
+                    cols[3].markdown(f"<div>{row['ToolLife_predicted_final']}</div>", unsafe_allow_html=True)
                     cols[4].markdown(f"<div>{row['PresetCounter']}</div>", unsafe_allow_html=True)
                     cols[5].markdown(f"<div>{row['TotalCounter']}</div>", unsafe_allow_html=True)
                     cols[6].markdown(f"<div>{row['Balance (pcs)']}</div>", unsafe_allow_html=True)
