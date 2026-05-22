@@ -95,6 +95,7 @@ def load_data(limit: int = 1000, plant_code: int = 2100):
         -- 06/11/2025 Add in Machine without ToolLife information (Only for Technical Call Function)
         -- 11/11/2025 Add in Material information
         -- 04/05/2026 Revise new MDM
+        -- 22/05/2026 PresetCounter sourced from MDM.dbo.tTOOLLIFE
 
         DECLARE @Plant INT
         SET @Plant = ?
@@ -112,8 +113,9 @@ def load_data(limit: int = 1000, plant_code: int = 2100):
             ISNULL(TMM.Remark1, TN.Remark1)                 AS ToolingMainCategory,
             ISNULL(TMM.Remark2, TN.Remark2)                 AS ToolingSubCategory,
             TL.TotalCounter,
-            ISNULL(TL.PresetCounter, 0)                     AS PresetCounter,
-            (ISNULL(TL.PresetCounter, 0) - TL.TotalCounter) AS Balance,
+            -- ▼ PresetCounter from MDM.tTOOLLIFE instead of ToolLife
+            ISNULL(TLM.ToolLife, 0)                         AS PresetCounter,
+            (ISNULL(TLM.ToolLife, 0) - TL.TotalCounter)     AS Balance,
             DATEADD(HOUR, 8, TL.StartDate)                  AS StartDate,
             T.ToolNo                                        AS mmToolID,
             VM.CostPerUOM                                   AS UnitPrice,
@@ -128,6 +130,10 @@ def load_data(limit: int = 1000, plant_code: int = 2100):
             ON  TN.ToolCode = T.ToolNo
             AND T.Plant     = @Plant
             AND ISNULL(T.DelFlag, 0) = 0
+        LEFT JOIN [MDM].[dbo].[tTOOLLIFE] TLM
+            ON  TLM.ToolNo  = TN.ToolCode
+            AND TLM.Plant   = @Plant
+            AND ISNULL(TLM.DelFlag, 0) = 0
         LEFT JOIN [MDM].[dbo].[ToolMaterialMachine] TMM
             ON  TMM.ToolNo         = TN.ToolCode
             AND TMM.MachineID      = TN.MachineId
@@ -420,7 +426,6 @@ def load_data_all(plant_code: int = 2100):
         conn = get_db_connection()
         query = '''
         SET NOCOUNT ON
-        SET NOCOUNT ON
         SET ANSI_WARNINGS OFF
         ;
 
@@ -440,8 +445,9 @@ def load_data_all(plant_code: int = 2100):
             ISNULL(TMM.Remark1, TN.Remark1)             AS ToolingMainCategory,
             ISNULL(TMM.Remark2, TN.Remark2)             AS ToolingSubCategory,
             TL.TotalCounter,
-            ISNULL(TL.PresetCounter, 0)                 AS PresetCounter,
-            (ISNULL(TL.PresetCounter, 0) - TL.TotalCounter) AS Balance,
+            -- ▼ 改为从 MDM.dbo.tTOOLLIFE 读取 PresetCounter
+            ISNULL(TLM.ToolLife, 0)                     AS PresetCounter,
+            (ISNULL(TLM.ToolLife, 0) - TL.TotalCounter) AS Balance,
             DATEADD(HOUR, 8, TL.StartDate)              AS StartDate,
             T.ToolNo                                    AS mmToolID,
             VM.CostPerUOM                               AS UnitPrice,
@@ -456,17 +462,20 @@ def load_data_all(plant_code: int = 2100):
             ON TN.ToolCode = T.ToolNo
             AND T.Plant    = @Plant
             AND ISNULL(T.DelFlag, 0) = 0
-        -- Material from ToolLife matched to ToolMaterialMachine to prevent row multiplication
+        -- ▼ 新增：从 tTOOLLIFE 获取 ToolLife（PresetCounter）
+        LEFT JOIN [MDM].[dbo].[tTOOLLIFE] TLM
+            ON  TLM.ToolNo  = TN.ToolCode
+            AND TLM.Plant   = @Plant
+            AND ISNULL(TLM.DelFlag, 0) = 0
         LEFT JOIN [MDM].[dbo].[ToolMaterialMachine] TMM
-            ON  TMM.ToolNo      = TN.ToolCode
-            AND TMM.MachineID   = TN.MachineId
-            AND TMM.Material    = TL.Material
+            ON  TMM.ToolNo         = TN.ToolCode
+            AND TMM.MachineID      = TN.MachineId
+            AND TMM.Material       = TL.Material
             AND TMM.ToolingStation = TN.ToolingStation
-            AND TMM.Remark1 = TN.Remark1
-            AND TMM.Remark2 = TN.Remark2
-            AND TMM.Plant       = @Plant
-            AND TMM.IsDeleted   = 0
-        -- Latest price from TOOLVSMAKER (no ValidTo, use most recent ValidFrom)
+            AND TMM.Remark1        = TN.Remark1
+            AND TMM.Remark2        = TN.Remark2
+            AND TMM.Plant          = @Plant
+            AND TMM.IsDeleted      = 0
         LEFT JOIN (
             SELECT Plant, ToolNo, CostPerUOM,
                 ROW_NUMBER() OVER (PARTITION BY Plant, ToolNo ORDER BY ValidFrom DESC) AS rn
@@ -479,6 +488,8 @@ def load_data_all(plant_code: int = 2100):
         WHERE TN.MachineId LIKE 'MS%'
         AND TL.IsActiveTool = 1
         AND ISNULL(TL.Delflag, 0) = 0
+        -- AND TL.PresetCounter = 0  -- 可移除此过滤条件
+        ORDER BY TN.MachineId
 
         -- DROP TABLE #ToolLife
         -- select * from #ToolLife
