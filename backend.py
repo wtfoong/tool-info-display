@@ -997,82 +997,136 @@ def get_historical_data(MachineName, Position, ToolingStation, StartDate, EndDat
         SET ANSI_WARNINGS OFF
         ;
 
-        DECLARE @Plant INT
+        DECLARE @Plant      INT
         SET @Plant = ?
-        DECLARE @sDate DateTime, @eDate DateTime
-        DECLARE @MacID AS NVARCHAR(18)
-        DECLARE @MainCategory AS NVARCHAR(10)
-        DECLARE @ToolStation AS INT
+        DECLARE @sDate      DATETIME
+        DECLARE @eDate      DATETIME
+        DECLARE @MacID      NVARCHAR(18)
+        DECLARE @MainCategory NVARCHAR(10)
+        DECLARE @ToolStation  INT
 
-        SET @sDate='{StartDate}'
-        SET @eDate='{EndDate}'
+        SET @sDate        = '{StartDate}'
+        SET @eDate        = '{EndDate}'
+        SET @MacID        = '{MachineName}'
+        SET @MainCategory = '{Position}'
+        SET @ToolStation  = {ToolingStation}
 
-        SET @MacID='{MachineName}'
-        SET @MainCategory='{Position}'
-        SET @ToolStation={ToolingStation}
-        ------------------------------------------- ToolCounter ------------------------------------
-        SELECT TL.ToolNoID,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter,
-        DATEADD(HOUR, 8, TL.StartDate) AS StartDate, DATEADD(HOUR, 8, TL.CompletedDate) AS CompletedDate,TN.ToolPieces,
-        mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        ISNULL(mmTool.PresetCounter,0)PresetCounter,
-        mmTool.LoadX_Alm,mmTool.LoadZ_Alm
-        INTO #ToolLife FROM ToolLifeHistory TL
-        INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        ON TL.ToolNoID=TN.Id
-        WHERE TN.MachineID LIKE 'MS%'
-        AND TL.ToolNoID NOT IN (SELECT DISTINCT ToolNoID FROM ToolLife)
-        AND TN.MachineId=@MacID
-        AND mmTool.ToolingMainCategory=@MainCategory
-        AND mmTool.ToolingStation=@ToolStation
-        AND DATEADD(HOUR, 8, TL.StartDate) BETWEEN @sDate AND @eDate
-        AND TL.Delflag = 0
-        ORDER BY MACHINEID,SAPCode DESC
-
-        --SELECT TL.ToolNoID,mmTool.ToolID mmToolID,mmTool.ToolingMaker,TN.MachineId,TN.IdentifyNo,TL.StartCounter,TL.CurrentCounter,TL.TotalCounter, 0 IsActiveTool,
-        --TL.StartDate, TL.CompletedDate,TN.ToolPieces,
-        --mmTool.ToolingStation,mmTool.ProductGroup,mmTool.ToolingClass,mmTool.ToolingMainCategory, mmTool.ToolingSubCategory, mmTool.SAPCode,
-        --ISNULL(mmTool.PresetCounter,0)PresetCounter
-        --INTO #ToolLifeHist FROM ToolLifeHistory TL
-        --INNER JOIN (ToolNo TN INNER JOIN mmTool mmTool ON TN.mmToolID=mmTool.ID)
-        --ON TL.ToolNoID=TN.Id
-        --WHERE TL.ToolNoID IN (SELECT ToolNoID FROM #ToolLife)
-        --ORDER BY MACHINEID,SAPCode DESC
-
-        --INSERT INTO #ToolLife SELECT * FROM #ToolLifeHist
-        -- drop table #ToolLife,#ToolLifeHist
-
-        ------------------------------------------- Material & Machine Information ------------------------------------
-        SELECT Plant, MachineID, Dept, MaterialCode, MaterialDescription, MesCT
-        INTO #Session  FROM [SPLOEE].[dbo].[Session]
-        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
-        AND SessionStatus='RUNNING' AND Plant=@Plant
-
-        SELECT Plant,Dept,MachineID,MachineNo Location
-        INTO #WCMachineID FROM [MDM].[dbo].[WorkCenterMachineID]
-        WHERE MachineID IN (SELECT DISTINCT MachineID FROM #ToolLife)
-        AND DelFlag=0 AND IsActive=1 AND Plant=@Plant
-
-        ------------------------------------------- ToolLifeDetails In Group ------------------------------------
-        SELECT MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,min(StartDate)StartDate,max(CompletedDate)CompletedDate,
-        SUM(TotalCounter) TotalCounter,Max(PresetCounter)PresetCounter,max(LoadX_Alm)LoadX_Alm,max(LoadZ_Alm)LoadZ_Alm,mmToolID
-        INTO #TL FROM #ToolLife
-        GROUP BY MachineID,ToolNoID,ToolingMainCategory,ToolingSubCategory,ToolingStation,mmToolID
-        ORDER BY MachineID,ToolingMainCategory,ToolingStation
-
-        SELECT #TL.*, 
-        #Session.MesCT,#Session.MaterialCode,#Session.MaterialDescription,
-        #WCMachineID.Location
-        INTO #ToolInfo FROM #TL
-        LEFT OUTER JOIN #Session ON #TL.MachineID=#Session.MachineID
-        LEFT OUTER JOIN #WCMachineID ON #TL.MachineID=#WCMachineID.MachineID
+        ------------------------------------------- Step 1: Tool Life History Data ------------------------------------
+        -- 来源改为 ToolLifeHistory (历史记录)
+        -- mmTool → TTOOL + ToolMaterialMachine (Remark1/Remark2 替代 ToolingMainCategory/SubCategory)
+        -- 过滤: MachineId + MainCategory + ToolStation + 日期范围
 
         SELECT
-        Location, ToolingMainCategory AS [Turret], ToolingStation AS [Tool], ToolingSubCategory AS [Process], MachineID, ToolNoID,StartDate,TotalCounter,PresetCounter,LoadX_Alm,LoadZ_Alm, CompletedDate ,mmToolID
-        FROM #ToolInfo
-        Where TotalCounter > 0
-        ORDER BY ToolNoID Desc 
+            TL.ToolNoId,
+            T.ToolNo                                        AS mmToolID,
+            TN.MachineId,
+            TN.ToolId                                       AS IdentifyNo,
+            TL.StartCounter,
+            TL.CurrentCounter,
+            TL.TotalCounter,
+            DATEADD(HOUR, 8, TL.StartDate)                  AS StartDate,
+            DATEADD(HOUR, 8, TL.CompletedDate)              AS CompletedDate,
+            TN.ToolPieces,
+            TN.ToolingStation,
+            ISNULL(TMM.Remark1, TN.Remark1)                 AS ToolingMainCategory,
+            ISNULL(TMM.Remark2, TN.Remark2)                 AS ToolingSubCategory,
+            ISNULL(TL.PresetCounter, 0)                     AS PresetCounter,
+            0                                               AS LoadX_Alm,
+            0                                               AS LoadZ_Alm
+        INTO #ToolLife
+        FROM [SPLOEELOT].[dbo].[ToolLifeHistory] TL
+        INNER JOIN [SPLOEELOT].[dbo].[ToolNo] TN
+            ON  TL.ToolNoId = TN.Id
+            AND ISNULL(TN.Delflag, 0) = 0
+        INNER JOIN [MDM].[dbo].[TTOOL] T
+            ON  TN.ToolCode = T.ToolNo
+            AND T.Plant     = @Plant
+            AND ISNULL(T.DelFlag, 0) = 0
+        LEFT JOIN [MDM].[dbo].[ToolMaterialMachine] TMM
+            ON  TMM.ToolNo         = TN.ToolCode
+            AND TMM.MachineID      = TN.MachineId
+            AND TMM.Material       = TL.Material
+            AND TMM.ToolingStation = TN.ToolingStation
+            AND TMM.Remark1        = TN.Remark1
+            AND TMM.Remark2        = TN.Remark2
+            AND TMM.Plant          = @Plant
+            AND TMM.IsDeleted      = 0
+        WHERE TN.MachineId LIKE 'MS%'
+        AND TL.ToolNoId NOT IN (SELECT DISTINCT ToolNoId FROM [SPLOEELOT].[dbo].[ToolLife])
+        AND TN.MachineId                                    = @MacID
+        AND ISNULL(TMM.Remark1, TN.Remark1)                = @MainCategory
+        AND TN.ToolingStation                               = @ToolStation
+        AND DATEADD(HOUR, 8, TL.StartDate) BETWEEN @sDate AND @eDate
+        AND ISNULL(TL.Delflag, 0) = 0
 
-        DROP TABLE #TL,#ToolLife,#Session,#WCMachineID,#ToolInfo
+        ------------------------------------------- Step 2: Session (MesCT) ------------------------------------
+        SELECT MachineID, MesCT, MaterialCode, MaterialDescription
+        INTO #Session
+        FROM [SPLOEE].[dbo].[Session]
+        WHERE MachineID IN (SELECT DISTINCT MachineId FROM #ToolLife)
+        AND SessionStatus = 'RUNNING'
+        AND Plant = CAST(@Plant AS NVARCHAR)
+
+        ------------------------------------------- Step 3: Machine Location ------------------------------------
+        SELECT MachineID, MachineNo AS Location
+        INTO #WCMachineID
+        FROM [MDM].[dbo].[WorkCenterMachineID]
+        WHERE MachineID IN (SELECT DISTINCT MachineId FROM #ToolLife)
+        AND DelFlag  = 0
+        AND IsActive = 1
+        AND Plant    = @Plant
+
+        ------------------------------------------- Step 4: Group & Combine into ToolInfo ------------------------------------
+        -- ToolHistory 保留 GROUP BY 汇总，取 min(StartDate), max(CompletedDate), SUM(TotalCounter)
+        SELECT
+            MachineId,
+            ToolNoId,
+            ToolingMainCategory,
+            ToolingSubCategory,
+            ToolingStation,
+            MIN(StartDate)          AS StartDate,
+            MAX(CompletedDate)      AS CompletedDate,
+            SUM(TotalCounter)       AS TotalCounter,
+            MAX(PresetCounter)      AS PresetCounter,
+            MAX(LoadX_Alm)          AS LoadX_Alm,
+            MAX(LoadZ_Alm)          AS LoadZ_Alm,
+            mmToolID
+        INTO #TL
+        FROM #ToolLife
+        GROUP BY MachineId, ToolNoId, ToolingMainCategory, ToolingSubCategory, ToolingStation, mmToolID
+        ORDER BY MachineId, ToolingMainCategory, ToolingStation
+
+        SELECT
+            TL.*,
+            S.MesCT,
+            S.MaterialCode,
+            S.MaterialDescription,
+            W.Location
+        INTO #ToolInfo
+        FROM #TL TL
+        LEFT JOIN #Session     S ON S.MachineID = TL.MachineId
+        LEFT JOIN #WCMachineID W ON W.MachineID = TL.MachineId
+
+        ------------------------------------------- Final Output ------------------------------------
+        SELECT
+            Location,
+            ToolingMainCategory     AS [Turret],
+            ToolingStation          AS [Tool],
+            ToolingSubCategory      AS [Process],
+            MachineID               AS MachineID,
+            ToolNoID,
+            StartDate,
+            TotalCounter,
+            PresetCounter,
+            LoadX_Alm,
+            LoadZ_Alm,
+            CompletedDate,
+            mmToolID
+        FROM #ToolInfo
+        WHERE TotalCounter > 0
+        ORDER BY ToolNoId DESC
+
+        DROP TABLE #TL, #ToolLife, #Session, #WCMachineID, #ToolInfo
         '''
         df = pd.read_sql(query, conn, params=(plant_code,))
         conn.close()
